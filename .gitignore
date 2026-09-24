@@ -1,0 +1,18 @@
+# Local working files
+.DS_Store
+build/
+.venv/
+__pycache__/
+
+# Reference PDFs remain local pending redistribution review
+docs/references/*.pdf
+
+# Generated environments, recordings and fitted weights
+*.egg-info/
+.pytest_cache/
+.ruf_cache/
+.ruff_cache/
+data/
+runs/
+output/
+*.pt

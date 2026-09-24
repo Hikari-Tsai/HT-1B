@@ -1,0 +1,51 @@
+{
+  "circuit": {
+    "front_series": 100000.0,
+    "threshold_pot": 100000.0,
+    "ratio_pot": 10000.0,
+    "gain_pot": 100000.0,
+    "c3": 1e-05,
+    "r11": 274.0,
+    "attack_pot": 500000.0,
+    "r9": 47500.0,
+    "release_pot": 500000.0,
+    "r10": 274000.0,
+    "release_trim": 235000.0,
+    "r17": 20000.0,
+    "control_pot": 100000.0,
+    "supply": 15.0,
+    "opamp_rail": 13.5,
+    "opamp_gain": 1000.0,
+    "diode_drop": 0.55,
+    "rectifier_gain": 2.0,
+    "rectifier_offset": 0.03,
+    "pot_taper": 2.0,
+    "control_trim_fraction": 0.5,
+    "gre_dark": 1e-08,
+    "gre_span": 0.0009725515711707543,
+    "gre_half": 0.12477059967543748,
+    "gre_mix": 0.8,
+    "gre_attack_fast": 0.0009999069105090669,
+    "gre_attack_slow": 0.009974712875635026,
+    "gre_release_fast": 0.05,
+    "gre_release_slow": 0.49784552683860295,
+    "amp_gain": 2.4698314308319302,
+    "amp_headroom": 24.0,
+    "input_volts_per_fs": 10.0,
+    "output_volts_per_fs": 10.0
+  },
+  "controls": {
+    "threshold": 0.7,
+    "ratio": 0.5,
+    "attack": 0.15,
+    "release": 0.3,
+    "makeup_db": 0.0,
+    "mode": "manual"
+  },
+  "metadata": {
+    "source_checkpoint": "runs/run-20260925-005204/last.pt",
+    "step": 1500,
+    "model": "reduced circuit; fitted to supplied recordings, not a full CL-1B netlist",
+    "controls_note": "Default controls below are not inferred recording settings. Use per-record controls."
+  }
+}
