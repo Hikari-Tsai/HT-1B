@@ -1,0 +1,27 @@
+{
+  "model": {
+    "architecture": "s6_tfilm",
+    "width": 8,
+    "state_dim": 16,
+    "blocks": 2,
+    "context": 64,
+    "spectrum_dim": 8,
+    "conv_kernel": 4,
+    "expansion": 2
+  },
+  "training": {
+    "sample_rate": 48000,
+    "chunk_samples": 1024,
+    "warmup_samples": 49152,
+    "epochs": 50,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0,
+    "grad_clip": 1.0,
+    "seed": 7,
+    "fft_sizes": [256, 512, 1024],
+    "l1_weight": 1.0,
+    "esr_weight": 0.1,
+    "spectral_weight": 0.1,
+    "log_every_chunks": 100
+  }
+}
