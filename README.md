@@ -1,5 +1,7 @@
 # HT-1B：標準訓練與電路求解流程
 
+[CL-1B 互動比較頁](output/cl1b-comparison.html) · [完整資料測試報告](output/full-corpus-test-report.md)
+
 **S4＋TFiLM／S6＋Temporal FiLM 神經音訊模型**：新增的 PhysicsNeMo 序列訓練程式與使用步驟在 [神經模型訓練說明](s6/README.md)。同樣讀取單一立體聲 WAV（左 dry／右 wet），支援有狀態的分段處理、驗證與續訓；`check` 只做前向檢查，不會訓練。這兩套是資料驅動模型，與下方電路參數辨識 PINN 分開。
 
 本專案將 CL 1B 的縮減電路方程式用在兩條路徑：
@@ -53,6 +55,8 @@ TubeTech_a_0_r_0_r_10_t_0_g_0.wav
 | Ratio | 2、4、6、8、10，代表 2:1 至 10:1 |
 | Threshold | 0、−10、−20、−30、−40 |
 | Gain | 由 `g_` 後的數值讀取，按 dB 解讀 |
+
+Kaggle 第 1 版以 `t_10`、`t_20`、`t_30`、`t_40` 表示負的 threshold；程式同時接受這些標籤與 `t_-10`、`t_-20`、`t_-30`、`t_-40`，統一轉成 −10、−20、−30、−40 dB。無需重新命名音檔；manifest 的 `metadata.original_filename` 保留原始檔名，`filename_parameters.threshold_db` 儲存轉換後的 dB 值。Gain 的正負號維持原意。
 
 不要把左右聲道分別做音量正規化，也不要將它們混成 mono。`prepare` 會將檔名轉成模型控制值，並保留原始標籤與映射假設。**檔位到電阻值、threshold 與 ratio 的映射仍是近似，並非已量測的硬體校準表。**
 

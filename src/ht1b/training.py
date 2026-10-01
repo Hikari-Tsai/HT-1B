@@ -1,6 +1,7 @@
 """Inverse PINN training from paired audio; exports physical model parameters."""
 from dataclasses import asdict
 from pathlib import Path
+from importlib.metadata import version
 import hashlib
 import json
 import time
@@ -51,6 +52,12 @@ def train(manifest,output,circuit,steps=500,batch_size=256,width=64,layers=3,
     if device not in ('cpu','cuda'):
         raise ValueError('Use cpu or cuda; this stiff inverse model uses float64 (MPS lacks float64)')
     if device=='cuda' and not torch.cuda.is_available(): raise ValueError('CUDA unavailable')
+    device_info={'type':device,'torch_version':torch.__version__,'torch_cuda_version':torch.version.cuda}
+    if device=='cuda':
+        torch.cuda.reset_peak_memory_stats()
+        device_info.update(name=torch.cuda.get_device_name(),
+                           capability=list(torch.cuda.get_device_capability()))
+    print(json.dumps({'training_device':device_info}),flush=True)
     torch.set_num_threads(1)
     torch.manual_seed(seed)
     rng=np.random.default_rng(seed)
@@ -73,6 +80,8 @@ def train(manifest,output,circuit,steps=500,batch_size=256,width=64,layers=3,
         raise ValueError('Output already has a checkpoint; use --resume or another directory')
     network=TrajectoryPINN(len(records),width,layers).to(device=device,dtype=torch.float64)
     physical=LearnedCircuit(circuit).to(device=device,dtype=torch.float64)
+    if device=='cuda' and not all(p.is_cuda for p in list(network.parameters())+list(physical.parameters())):
+        raise RuntimeError('Training parameters must all be on CUDA')
     optimizer=torch.optim.Adam(list(network.parameters())+list(physical.parameters()),lr=learning_rate)
     start=0
     if saved:
@@ -145,8 +154,12 @@ def train(manifest,output,circuit,steps=500,batch_size=256,width=64,layers=3,
             u=torch.tensor(r.dry[ids],dtype=torch.float64,device=device).reshape(-1,1)*circuit.input_volts_per_fs
             pred=waveform(states,u,physical.values(),r.controls).cpu().numpy().ravel()
             reconstruction[r.id]=metrics(pred,r.wet[ids])
+    if device=='cuda':
+        torch.cuda.synchronize()
+        device_info['peak_allocated_bytes']=torch.cuda.max_memory_allocated()
     report=dict(step=start+steps,first_loss=first_loss,last_loss=last_loss,
-                seconds=time.perf_counter()-started,device=device,physicsnemo_version='2.2.2',
+                seconds=time.perf_counter()-started,device=device,device_info=device_info,
+                physicsnemo_version=version('nvidia-physicsnemo'),
                 train_records=[r.id for r in records],
                 holdout_records=[r.id for r in all_records if r.split!='train'],
                 trajectory_reconstruction=reconstruction,

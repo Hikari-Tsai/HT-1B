@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-Hant" data-theme="light">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>CL 1B · 六種方法共同驗證</title>
+  <style>/*__STYLE__*/</style>
+</head>
+<body>
+<a class="skip" href="#five-models">跳至共同比較</a>
+<header class="topbar"><div class="wordmark">HT—1B <span>RESEARCH / MODEL COMPARISON</span></div><button id="theme" class="quiet" aria-label="切換深色模式">深色模式</button></header>
+<main>
+  <section class="intro">
+    <div><p class="eyebrow">HT—1B / MATCHED VALIDATION</p><h1>六種方法，<br>放在同一把尺上。</h1><p class="lede">純演算法、MLP＋PINN、GRU＋PINN、S4、S6、RiccardoVib。<br class="desktop">固定權重、相同輸入與評分位置，從總覽比較到逐設定檢視。</p></div>
+    <dl class="experiment"><div><dt>共同驗證素材</dt><dd>620 <small>檔案</small></dd></div><div><dt>共同評分視窗</dt><dd>1,240 <small>位置 / 48 kHz</small></dd></div><div><dt>神經模型推論 GPU</dt><dd class="gpu">RTX 5060 Ti</dd></div></dl>
+  </section>
+  <aside class="scope"><span>共同評估</span><p>六種方法在同一組驗證視窗計分：每段 4,096 樣本 Dry 暖機，後 1,024 樣本（21.33 ms）評分。RiccardoVib 保留原生 16 樣本歷史。訓練量不同，RiccardoVib 也可能見過這批素材；這裡比較既有模型的輸出誤差，不是新的獨立泛化測試。</p></aside>
+  <section id="s6-pinn-study" class="section" hidden>
+    <div class="section-head"><div><p class="eyebrow">NEW EXPERIMENT / SHARED CIRCUIT PHYSICS</p><h2>S6＋TFiLM＋PINN</h2></div><span id="s6-pinn-status" role="status"></span></div>
+    <p id="s6-pinn-result"></p><p id="s6-pinn-time" class="muted"></p>
+    <details class="methods"><summary>物理約束、訓練設定與每輪結果 <span>＋</span></summary>
+      <div class="method-grid"><article><h3>與 MLP／GRU 共用方程</h3><p>S6＋TFiLM 預測電容電壓 e 與快、慢光學狀態 f／s，再由共用電路公式輸出 Wet。加入 C3 電流平衡、快／慢狀態方程殘差與電路參數先驗；神經網路的隱藏狀態不直接當成電路狀態。</p><p>音訊目標沿用 L1＋0.1 ESR＋0.1 MR-STFT；另加平均物理殘差 MSE 與 0.0001 參數先驗。網路從頭訓練，電路參數從原始值開始。</p></article>
+      <article><h3>相同取樣範圍，新增物理狀態輸出</h3><p>16 輪，每輪 8,680 個訓練區段、涵蓋 620 檔。每區段 4,096 樣本 Dry 暖機＋1,024 樣本學習；位置與順序沿用原 S6。每輪在既有 1,240 個驗證視窗選模，沒有開啟測試集。</p><p>這是取樣實驗，不是完整樣本覆蓋。85.33 ms 暖機不足以確立長 Release 歷史；本次同時改變輸出端與 loss，不能把差異全部歸因於物理 loss。新增模型以網路狀態直接推論，MLP／GRU 舊結果則是學得參數後由數值求解器輸出。</p></article></div>
+      <div id="s6-pinn-history" class="table-wrap"></div>
+    </details>
+  </section>
+  <section id="five-models" class="section five-models" hidden>
+    <div class="section-head"><div><p class="eyebrow">01 / SIX METHODS · ONE PROTOCOL</p><h2>五模型＋純演算法</h2></div><button id="five-csv" class="quiet">下載目前篩選 CSV ↗</button></div>
+    <div class="five-toolbar"><div class="segments" role="group" aria-label="共同驗證指標"><button data-five-metric="esr" aria-pressed="true">ESR</button><button data-five-metric="mse" aria-pressed="false">MSE</button><button data-five-metric="mae" aria-pressed="false">MAE</button><button data-five-metric="mrstft" aria-pressed="false">MR-STFT</button><button data-five-metric="rms_db_mae" aria-pressed="false">RMS 包絡</button></div><label class="select-label">彙整方式<select id="five-aggregate"><option value="macro">逐檔等權平均</option><option value="pooled">合併樣本計分</option></select></label></div>
+    <div class="five-filters"><label class="select-label">Attack<select id="five-attack"><option value="all">全部</option></select></label><label class="select-label">Release<select id="five-release"><option value="all">全部</option></select></label><label class="select-label">Ratio<select id="five-ratio"><option value="all">全部</option></select></label><label class="select-label">Threshold<select id="five-threshold"><option value="all">全部</option></select></label><button id="five-reset" class="quiet">重設篩選</button><span id="five-count" class="muted" role="status"></span></div>
+    <p id="five-help" class="five-help"></p>
+    <div id="five-cards" class="five-cards" aria-live="polite"></div>
+    <div class="five-analysis"><div class="panel"><h3>同尺度比較</h3><p class="muted">所有長條由 0 起算 · 誤差越低越好</p><div id="five-bars"></div><p id="five-insight" class="chart-note" aria-live="polite"></p></div><div class="panel"><h3>五項指標並列</h3><p class="muted">各欄粗體為目前篩選範圍的最低誤差</p><div id="five-matrix" class="table-wrap"></div></div></div>
+    <div class="section-head five-record-head"><div><h3>逐檔檢視</h3><p class="muted">同一列就是同一組輸入、旋鈕設定與評分位置</p></div><label class="select-label">依模型誤差由高到低<select id="five-sort"><option value="s6">S6</option><option value="baseline">純演算法</option><option value="s4">S4</option><option value="mlp">MLP＋PINN</option><option value="gru">GRU＋PINN</option><option value="riccardovib">RiccardoVib</option></select></label></div>
+    <div id="five-records" class="table-wrap five-records"></div>
+    <div class="five-pagination"><button id="five-prev" class="quiet">← 上一頁</button><span id="five-page" class="muted" role="status"></span><button id="five-next" class="quiet">下一頁 →</button></div>
+    <details class="methods five-methods"><summary>模型來源、訓練量與共同評估方法 <span>＋</span></summary><div class="method-grid"><article><h3>固定的六種方法</h3><p><b>純演算法：</b>未經資料擬合的原始電路參數，直接數值求解。<br><b>MLP＋PINN：</b>全資料訓練後辨識的電路參數，以數值求解器輸出。<br><b>GRU＋PINN：</b>全資料訓練後辨識的另一組電路參數，以同一求解器輸出。<br><b>S4＋TFiLM：</b>代表視窗訓練 16 輪，固定第 14 輪。<br><b>S6＋TFiLM：</b>代表視窗訓練 16 輪，固定第 8 輪。<br><b>RiccardoVib：</b>既有 CL1B 權重與固定條件校準。</p><p>這次只重新推論，沒有重新訓練或依新結果挑選權重。</p></article><article><h3>相同樣本與歷史</h3><p>沿用 620 檔的每檔 2 個驗證區段，各取中央視窗。每視窗共 5,120 樣本，前 4,096 樣本（85.33 ms）只提供 Dry 歷史，後 1,024 樣本評分；共 1,269,760 個評分樣本。</p><p>純演算法、MLP／GRU 電路與 S4／S6 都逐視窗重設狀態。RiccardoVib 按原生區塊使用前 16 樣本。沒有輸出增益擬合或延遲校正。短暖機與短評分視窗不足以代表長時間 Release 行為。</p></article><article><h3>五項指標的定義</h3><p>ESR = Σ誤差² / max(ΣWet², N × 10⁻⁸)；MSE 與 MAE 維持原振幅。逐檔平均讓 620 檔等權；合併 ESR 先累加誤差能量與目標能量，所以兩者可能明顯不同。</p><p>MR-STFT 使用適合此短視窗的 256／512／1,024 FFT、1/4 hop、periodic Hann、反射置中 padding，平均頻譜收斂誤差與 log magnitude L1。RMS 包絡為 10 ms 視窗、−100 dBFS 下限。頻譜／包絡在合併模式依樣本數加權，不串接不連續片段。</p></article><article><h3>如何解讀比較</h3><p>MLP／GRU 曾完整走訪 51 億訓練樣本；S4／S6 每輪只取各訓練區段的代表視窗，RiccardoVib 的原始訓練範圍未完全確認。相同評分條件不等於相同訓練預算。</p><p>驗證集曾用來選模，因此不是新的獨立測試。以下歷史實驗使用較長片段或完整 Dry 歷史，應在各自區塊內解讀；五模型＋純演算法全部來自這次共同評估。</p></article></div></details>
+  </section>
+  <div class="section-head history-heading"><div><p class="eyebrow">02 / EXPERIMENT ARCHIVE</p><h2>原始實驗與試聽</h2></div><p class="muted">展開查看各自的評分範圍</p></div>
+  <details class="history-group"><summary>全資料訓練與保留區段評估 <span>MLP · GRU · RiccardoVib</span></summary>
+  <section id="independent-test" class="section full-test" hidden>
+    <div class="section-head"><div><p class="eyebrow">NEW EXPERIMENT / FULL CORPUS</p><h2>全資料與保留區段測試</h2></div><a class="report-link" href="full-corpus-test-report.md">閱讀完整測試報告 ↗</a></div>
+    <p class="full-test-lede">620 個檔案的訓練區間完整走訪一輪；先用驗證集選模，再對最後一段保留素材測試一次。以下分數採逐檔等權平均，與下方五段短片段的三模型比較屬不同實驗。</p>
+    <div id="full-test-facts" class="full-test-facts"></div>
+    <div class="panel full-test-methods"><div><p class="eyebrow">MODEL SELECTION</p><h3 id="full-test-selection"></h3><p id="full-test-validation" class="muted"></p></div><div><p class="eyebrow">TEST SCOPE</p><p>約 199.7 秒至檔尾，依模型所需的 Dry 歷史計分；同曲隔離由聲學演算法推定，缺少人工素材標籤。此區保留原先驗證後鎖定的 MLP 單模型結果；下方另列 RiccardoVib 與 GRU 在相同區間的探索性比較。</p></div></div>
+    <div class="section-head full-test-controls"><div><h3>逐設定檢視</h3><p class="muted">切換指標、篩選旋鈕設定，再查看各檔結果</p></div><div class="controls"><div id="full-test-metrics" class="segments" role="group" aria-label="完整測試指標"><button data-full-metric="esr" aria-pressed="true">ESR</button><button data-full-metric="mse" aria-pressed="false">MSE</button><button data-full-metric="mae" aria-pressed="false">MAE</button><button data-full-metric="mrstft" aria-pressed="false">MR-STFT</button><button data-full-metric="rms_db_mae" aria-pressed="false">RMS 包絡</button></div></div></div>
+    <div class="full-test-filters"><label class="select-label">Attack<select id="full-attack"><option value="all">全部</option></select></label><label class="select-label">Release<select id="full-release"><option value="all">全部</option></select></label><label class="select-label">Ratio<select id="full-ratio"><option value="all">全部</option></select></label><label class="select-label">Threshold<select id="full-threshold"><option value="all">全部</option></select></label><button id="full-test-csv" class="quiet">下載篩選結果 CSV ↗</button></div>
+    <div class="full-test-result"><div class="panel"><p class="eyebrow">FILTERED MACRO MEAN</p><div id="full-test-value" class="full-test-value mono"></div><p id="full-test-count" class="muted"></p></div><div class="panel"><h3>按 Ratio 分組</h3><div id="full-test-ratio-chart"></div></div></div>
+    <div class="table-wrap full-test-table"><table><caption id="full-test-caption">逐檔測試結果</caption><thead><tr><th scope="col">檔案 / 旋鈕設定</th><th scope="col" id="full-test-column">ESR ↓</th><th scope="col">評分區間</th><th scope="col">測試長度</th></tr></thead><tbody id="full-test-rows"></tbody></table></div>
+    <p class="chart-note">表格顯示目前篩選條件下誤差最高的 25 檔；CSV 可取得全部篩選結果。分組與篩選平均值是各檔分數的算術平均；ESR 不能把組別平均直接解讀為合併樣本的 ESR。</p>
+  </section>
+  <section id="architecture" class="section architecture" hidden>
+    <div class="section-head"><div><p class="eyebrow">FULL CORPUS / MODEL STUDY</p><h2>全資料模型比較</h2></div><span class="architecture-badge">同一評分區間 · 620 檔</span></div>
+    <p class="architecture-lede">MLP＋PINN 與 GRU＋PINN 都完整走訪 5,100,828,000 個訓練樣本，最後以辨識的物理參數做數值求解；RiccardoVib 使用作者提供的固定預訓練權重。下方在相同驗證／測試區間計分，但 RiccardoVib 原始訓練素材可能與這批資料重疊。</p>
+    <div class="architecture-controls"><div class="segments" role="group" aria-label="全資料模型比較資料切分"><button data-arch-split="validation" aria-pressed="true">驗證 · 選模依據</button><button data-arch-split="test" aria-pressed="false">測試 · 探索性重用</button></div><div class="segments" role="group" aria-label="全資料模型比較指標"><button data-arch-metric="esr" aria-pressed="true">ESR</button><button data-arch-metric="mse" aria-pressed="false">MSE</button><button data-arch-metric="mae" aria-pressed="false">MAE</button><button data-arch-metric="mrstft" aria-pressed="false">MR-STFT</button><button data-arch-metric="rms_db_mae" aria-pressed="false">RMS 包絡</button></div><label class="select-label">Ratio 篩選<select id="arch-ratio"><option value="all">全部設定</option></select></label></div>
+    <p id="arch-scope" class="architecture-scope" role="status"></p>
+    <div id="arch-cards" class="architecture-cards" aria-live="polite"></div>
+    <div class="architecture-grid"><div class="panel"><h3>按 Ratio 比較</h3><p class="muted">每組為逐檔等權平均；圖軸由 0 起算</p><div id="arch-ratio-chart"></div></div><div class="panel"><div class="architecture-table-head"><h3>逐檔差異</h3><label class="select-label">排序方式<select id="arch-record-sort"><option value="gru">GRU − MLP 差異</option><option value="riccardovib">RiccardoVib − MLP 差異</option></select></label></div><p id="arch-record-caption" class="muted"></p><div id="arch-record-table" class="table-wrap"></div></div></div>
+    <div class="architecture-footer"><p>本方架構依驗證 ESR 選擇 MLP（0.25196；GRU 0.33403）。RiccardoVib 的原始訓練素材可能包含這批錄音，不能把它與本方模型的分數直接當作公平泛化排名。測試集已在先前實驗開封，此處結果只供探索性比較，不能反向改選模型或宣稱新的獨立測試。</p><button id="arch-csv" class="quiet">下載目前比較 CSV ↗</button></div>
+  </section>
+  </details>
+  <details class="history-group"><summary>S4／S6 訓練曲線與最佳輪次 <span>16 輪 · 代表視窗</span></summary>
+  <section id="sequence-study" class="section sequence-study" hidden>
+    <div class="section-head"><div><p class="eyebrow">SAMPLED WINDOWS / SEQUENCE STUDY</p><h2>S4 與 S6 架構實驗</h2></div><span class="architecture-badge">同資料 · 同視窗 · GPU 訓練</span></div>
+    <p id="sequence-scope" class="architecture-lede"></p>
+    <div class="architecture-controls"><div class="segments" role="group" aria-label="S4 與 S6 驗證指標"><button data-seq-metric="esr" aria-pressed="true">ESR</button><button data-seq-metric="mse" aria-pressed="false">MSE</button><button data-seq-metric="mae" aria-pressed="false">MAE</button></div><label class="select-label">Ratio 篩選<select id="seq-ratio"><option value="all">全部設定</option></select></label><button id="seq-csv" class="quiet">下載逐檔 CSV ↗</button></div>
+    <p id="seq-readout" class="architecture-scope" role="status"></p>
+    <div id="seq-cards" class="architecture-cards"></div>
+    <div class="architecture-grid"><div class="panel"><h3>驗證誤差隨訓練輪次</h3><div id="seq-history"></div></div><div class="panel"><h3>逐檔差異</h3><p class="muted">顯示兩模型差異最大的 15 檔；完整結果可下載 CSV</p><div id="seq-records" class="table-wrap"></div></div></div>
+    <p class="chart-note">每輪從每個訓練區段取一個不同位置的代表視窗；表格只評固定的驗證視窗。逐檔等權平均 ESR 供選模，低能量視窗的 ESR 可能特別大，請搭配 MSE、MAE 判讀。訓練 loss 為批次最佳化目標，不能當作驗證成績。此研究使用已知切分的驗證集，沒有宣稱新的獨立測試；也不能與上方全區段 MLP、GRU 或 RiccardoVib 分數直接排名。</p>
+  </section>
+  </details>
+  <details class="history-group" id="legacy-listening"><summary>原始短片段比較與試聽工具 <span>5 組設定 · 約 2 秒</span></summary>
+  <section id="comparison" class="section">
+    <div class="section-head"><div><p class="eyebrow">01 / MEASURE</p><h2>誤差比較</h2></div><div class="controls"><div id="metric-controls" class="segments" role="group" aria-label="誤差指標"><button data-metric="esr" aria-pressed="true">ESR</button><button data-metric="mse" aria-pressed="false">MSE</button><button data-metric="mae" aria-pressed="false">MAE</button><button data-metric="mrstft" aria-pressed="false">MR-STFT</button><button data-metric="rms_db_mae" aria-pressed="false">RMS 包絡</button></div><label class="select-label">我們的 checkpoint <select id="step"><option value="2000">2,000 步</option><option value="3000" selected>3,000 步 · 最佳 ESR</option><option value="4000">4,000 步</option><option value="5000">5,000 步 · 最終</option></select></label></div></div>
+    <p id="metric-help" class="muted"></p>
+    <div id="summary" class="summary" aria-live="polite"></div>
+    <div class="analysis-grid">
+      <div class="panel conditions"><div class="panel-head"><h3>逐設定比較</h3><span class="muted">點選設定，連動下方試聽</span></div><div id="legend" class="legend"></div><div id="condition-chart"></div><p class="chart-note">共用線性比例尺，由 0 起算。每列為同一設定的 3 個模型。</p></div>
+      <div class="panel insight"><p class="eyebrow">READOUT</p><h3 id="insight-title"></h3><p id="insight-body"></p><div class="delta"><span id="delta-value"></span><p id="delta-label"></p></div><p class="chart-note">平均值採 5 段各自計分後的算術平均；誤差越低越好，降低比例不是還原度。</p></div>
+    </div>
+  </section>
+  <section class="section" id="listen">
+    <div class="section-head"><div><p class="eyebrow">02 / LISTEN</p><h2>把差異聽出來</h2></div><label class="select-label">音訊設定 <select id="record" aria-label="選擇試聽的旋鈕設定"></select></label></div>
+    <div class="listening panel"><div class="listen-top"><div id="knobs" class="knobs"></div><div class="segments" role="group" aria-label="波形模式"><button data-wave="signal" aria-pressed="true">輸出波形</button><button data-wave="residual" aria-pressed="false">與 Wet 的殘差</button><button data-wave="rms" aria-pressed="false">RMS 包絡</button></div></div>
+      <div class="wave-header"><span id="wave-caption"></span><span id="wave-scale" class="mono"></span></div>
+      <div class="wave-wrap"><canvas id="waveform" role="img" aria-label="目前設定的振幅包絡波形"></canvas><div id="playhead"></div></div><div class="wave-axis"><span>0.000 s</span><span>1.000 s</span><span>1.999 s</span></div>
+      <div id="tracks" class="tracks" role="group" aria-label="選擇試聽音軌"></div>
+      <div class="transport"><button id="play" class="primary" aria-label="播放音訊">播放</button><span id="time" class="mono">0.000 / 1.999 s</span><input id="seek" type="range" min="0" max="1.999333" value="0" step="0.001" aria-label="播放位置"><label class="check"><input id="loop" type="checkbox" checked>循環</label><label class="volume">音量 <input id="volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="共同播放音量"></label><button id="download-audio" class="quiet">下載此音軌</button></div>
+      <p id="audio-status" class="chart-note" role="status">點選播放開始試聽。切換音軌會保留播放位置，可能有短暫載入間隔。</p><p class="chart-note">Dry 是輸入，Wet 是實測目標。各模型維持原始振幅；所有音軌共用音量，不做個別增益或延遲校正。波形為 480 組最小／最大值包絡；殘差僅供看圖，試聽仍播放輸出。</p>
+    </div>
+    <div class="panel dynamics"><div class="panel-head"><h3>Attack / Release 區段誤差</h3><button id="export-regions" class="quiet">匯出標記與誤差</button></div><p class="muted">手動指定你在輸入與 Wet 包絡中辨識的動態區段。未標記表示尚未辨識，或片段不足；這裡不估計硬體時間常數。</p>
+      <div class="region-controls"><label class="select-label">區段類型<select id="region-kind"><option value="attack">Attack</option><option value="release">Release</option></select></label><label class="select-label">起點（秒）<input id="region-start" type="number" min="0" max="1.999333" step="0.01" placeholder="未標記"></label><label class="select-label">終點（秒）<input id="region-end" type="number" min="0" max="1.999333" step="0.01" placeholder="未標記"></label><button id="region-start-current" class="quiet">目前位置 → 起點</button><button id="region-end-current" class="quiet">目前位置 → 終點</button><button id="region-apply">套用區段</button><button id="region-clear" class="quiet">清除此標記</button></div>
+      <p id="region-status" role="status" class="chart-note"></p><div id="region-results" class="table-wrap"></div>
+      <p class="chart-note">邊界就近對齊 10 ms 分析格點，最後一格截止於片段結尾；表格顯示實際區間。所有模型共用同一標記，可切换 checkpoint 比較。包絡誤差以 dB 表示，ESR 在目標能量近零時顯示「無法定義」。</p>
+    </div>
+    <div class="panel blind-entry"><div><p class="eyebrow">LISTEN WITHOUT LABELS</p><h3>先聽，再看模型名稱</h3><p class="muted">三模型＋隱藏 Wet＋Dry 隨機排列。請依與 Wet 的相似程度評 0–100 分，越高越相似。這是個人盲測工具，並非正式 MUSHRA 研究。</p></div><div class="blind-actions"><button id="blind-start" class="primary">開始盲測</button><button id="blind-export" class="quiet">匯出盲測記錄</button></div><p id="blind-summary" class="chart-note" role="status"></p></div>
+  </section>
+  <section class="section">
+    <div class="section-head"><div><p class="eyebrow">03 / TRAINING</p><h2>Loss 降了，結果有更好嗎？</h2></div><p class="head-note">點選步數，切換全頁 checkpoint</p></div>
+    <div class="training-grid"><div class="panel"><h3>固定評估點的訓練 Loss</h3><p class="muted">相同評估點，避免隨機 batch 造成讀值起伏</p><div id="loss-chart"></div></div><div class="panel"><h3>直接求解的驗證 ESR</h3><p class="muted">使用上方比較的相同裁切區間與 5 組設定</p><div id="validation-chart"></div></div></div>
+    <p class="training-note">從 3,000 到 5,000 步，固定 Loss 繼續下降，但驗證 ESR 上升。因此預設採用 3,000 步；延長訓練本身不保證新音訊更準。</p>
+  </section>
+  <section class="section">
+    <div class="section-head"><div><p class="eyebrow">04 / EVIDENCE</p><h2>數據與方法</h2></div><button id="csv" class="quiet">匯出完整 CSV ↗</button></div>
+    <div class="table-wrap"><table><caption id="table-caption">逐設定誤差</caption><thead><tr><th scope="col">設定 / A · R · Ratio · Threshold</th><th scope="col">純演算法</th><th scope="col">PhysicsNeMo</th><th scope="col">RiccardoVib</th></tr></thead><tbody id="metric-table"></tbody></table></div>
+    <details class="methods"><summary>評估方法、模型來源與限制 <span>＋</span></summary><div class="method-grid"><article><h3>同一份輸入，同一段評分</h3><p>5 段 48 kHz 音訊使用共同樣本區間 [16, 95984)，每段 95,968 個樣本。所有模型不額外擬合輸出增益或時間偏移。各段獨立計分，再取算術平均。</p><p><b>ESR</b> = Σ(預測 − Wet)² / ΣWet²。<b>MSE</b> = 平均平方誤差。<b>MAE</b> = 平均絕對誤差。ESR 無單位，MSE 為振幅平方，MAE 為振幅；皆越低越好。</p><p>Attack / Release 顯示資料集的旋鈕刻度，並非毫秒或秒。Threshold 使用負 dB；本組 Gain 均為 0。</p></article><article><h3>三條不同的建模路徑</h3><p><b>純演算法：</b>未經本次擬合的物理電路參數，直接數值求解。</p><p><b>PhysicsNeMo：</b>PINN 從我們的 20 段訓練資料前綴辨識物理參數，再由數值求解器輸出新音訊。圖表評的是部署用求解結果，不是 PINN 的錄音軌跡重建。</p><p><b>RiccardoVib：</b>條件式 Encoder–Decoder 模型，以固定權重直接推論。原生 TensorFlow 與 Torch 移植在 128 個區塊的最大差異為 <span id="parity"></span>。訓練與 RiccardoVib 模型的 GPU 推論使用 RTX 5060 Ti；數值求解使用 CPU。</p></article><article><h3>如何解讀這個排名</h3><p>RiccardoVib 的訓練集與訓練量和我們不同，也可能包含這些錄音，因此不是獨立的泛化測試。5 段短片段無法代表整首音樂、所有旋鈕設定或長時間壓縮記憶。</p><p>RiccardoVib 的前處理未完整附在模型資料中；條件順序與 Threshold 方向經我們的 20 段訓練資料校準，未使用此處 5 段驗證資料。最佳 checkpoint 使用此驗證集選擇，仍需額外獨立測試。</p></article><article><h3>可追溯來源</h3><p><a id="source-link" target="_blank" rel="noopener">RiccardoVib GitHub repository ↗</a><br><a href="https://www.kaggle.com/datasets/riccardosimionato/tubetech-cl-1b" target="_blank" rel="noopener">Kaggle / TubeTech CL 1B ↗</a></p><p class="provenance">COMMIT<br><code id="commit"></code><br>WEIGHTS / SHA-256<br><code id="hash"></code></p><p>音訊與權重的權利依原始來源；本頁將本機評估片段嵌入，供離線分析。</p></article><article><h3>新增指標的明確定義</h3><p><b>MR-STFT：</b>FFT／視窗為 512、1,024、2,048 samples，hop 為 128、256、512。使用 periodic Hann、置中反射 padding、未正規化 FFT。每解析度計算頻譜收斂誤差 ||P−T||F / ||T||F ＋平均 |ln P−ln T|，再等權平均。P、T 為振幅頻譜，平方振幅下限 1e−8。</p><p><b>RMS 包絡 MAE：</b>10 ms 不重疊視窗，最後一格使用剩餘樣本；RMS 轉 dBFS，下限 −100 dBFS。預測與 Wet 的絕對 dB 差以每格樣本數加權平均，不額外匹配音量。</p><p>這是本頁固定的評估規格，並非兩篇論文數字的直接重現。MR-STFT、包絡誤差均越低越好；頻谱誤差不測相位，應與時域指標一起看。</p></article><article><h3>論文與聽測範圍</h3><p><a href="https://www.dafx.de/paper-archive/2023/DAFx23_paper_10.pdf" target="_blank" rel="noopener">DAFx 2023 / CL 1B ↗</a><br><a href="https://www.frontiersin.org/journals/signal-processing/articles/10.3389/frsip.2025.1580395/full" target="_blank" rel="noopener">Frontiers 2025 / 黑箱與灰箱建模 ↗</a><br><a href="https://github.com/csteinmetz1/auraloss/blob/main/auraloss/freq.py" target="_blank" rel="noopener">MR-STFT 公式參考 / auraloss ↗</a></p><p>盲測採隨機代號與 0–100 相似度評分，包含隱藏參考與 Dry 對照；短片段、個人自評、無受試者篩選，不能當作正式 MUSHRA 統計。送出前不顯示身份或模型圖表；不會產生預設分數。</p><p>分數與標記嘗試儲存在目前瀏覽器；關閉或搬移檔案前請匯出備份。資料不會傳送到外部服務。</p></article></div></details>
+  </section>
+  </details>
+  <footer><span>HT—1B / LOCAL RESEARCH</span><span>實際評估資料 · 離線可用 · 無外部依賴</span></footer>
+</main>
+<audio id="audio" preload="auto" loop></audio>
+<dialog id="blind-dialog" aria-labelledby="blind-title"><div class="blind-heading"><div><p class="eyebrow">PERSONAL LISTENING TRIAL</p><h2 id="blind-title">與參考 Wet 有多接近？</h2></div><button id="blind-close" class="quiet">關閉／稍後繼續</button></div><p id="blind-context" class="muted"></p><p class="chart-note">0 = 完全不同，100 = 與 Wet 相同。先聽參考，再逐一試聽五個代號；評的是還原相似度，不是喜好。所有音軌共用音量。</p><div class="blind-transport"><button id="blind-reference">播放參考 Wet</button><button id="blind-pause" class="quiet">暫停</button><label class="volume">音量 <input id="blind-volume" type="range" min="0" max="1" value="1" step="0.01" aria-label="盲測共同音量"></label><label class="check"><input id="blind-loop" type="checkbox" checked>循環</label></div><div class="blind-seek"><span id="blind-time" class="mono">0.000 s</span><input id="blind-seek" type="range" min="0" max="1.999333" value="0" step="0.001" aria-label="盲測播放位置"></div><div id="blind-candidates"></div><p id="blind-status" class="chart-note" role="status"></p><div class="blind-footer"><button id="blind-submit" class="primary" disabled>送出評分並揭示身份</button><button id="blind-new" hidden>開始新一輪</button><button id="blind-export-dialog" class="quiet">匯出已完成記錄</button></div><p class="chart-note">記錄保留當輪設定與 checkpoint。關閉可繼續未送出的當輪；重新整理前請先完成並匯出。此工具不提供正式 MUSHRA 研究分數。</p><audio id="blind-audio" preload="auto" loop></audio></dialog>
+<script id="benchmark-data" type="application/json">/*__DATA__*/</script>
+<script>/*__SCRIPT__*/</script>
+</body></html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant" data-theme="light">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>HT-1B｜六模型共同驗證</title><style>/*__STYLE__*/</style></head>
+<body>
+<a class="skip" href="#five-models">跳至模型比較</a>
+<header class="topbar"><a class="brand" href="#top">HT—1B <small>MODEL EVALUATION</small></a><nav aria-label="頁面導覽"><a href="#five-models">模型比較</a><a href="#records">逐檔資料</a><a href="#protocol">方法與範圍</a></nav><button id="theme" class="quiet">深色模式</button></header>
+<main id="top">
+  <section class="intro"><div><p class="eyebrow">SAME AUDIO · SAME SCORING PROTOCOL</p><h1>六個模型，<br>一份共同比較。</h1><p class="lede">MLP、GRU、S4、S6、S6＋PINN 與 RiccardoVib。<br>以相同位置的實測 Wet 為目標，另列純演算法基準。</p></div><dl class="facts"><div><dt>目前評估錄音</dt><dd><span id="fact-files">—</span> <small>檔</small></dd></div><div><dt>共同評分位置</dt><dd><span id="fact-windows">—</span> <small>段</small></dd></div><div><dt>每段計分長度</dt><dd id="fact-length">—</dd></div></dl></section>
+  <aside class="scope"><strong>探索性評估</strong><p id="scope-copy"></p></aside>
+
+  <section id="five-models" class="section">
+    <div class="section-head"><div><p class="eyebrow">01 / MODEL COMPARISON</p><h2>六模型＋純演算法基準</h2></div><button id="export-summary" class="quiet">匯出目前總表 CSV</button></div>
+    <div class="evaluation-picker"><label>選擇評估片段<select id="evaluation"></select></label><p id="evaluation-note" class="helper" aria-live="polite"></p><p class="small muted">公開版不含原始音訊與試聽檔；素材判讀結果已摘要於本頁的長片段方法說明。</p></div>
+    <div class="toolbar"><div id="metric-controls" class="segments" role="group" aria-label="選擇排序與強調的指標"><button data-metric="esr" aria-pressed="true">ESR</button><button data-metric="mse" aria-pressed="false">MSE</button><button data-metric="mae" aria-pressed="false">MAE</button><button data-metric="mrstft" aria-pressed="false">MR-STFT</button><button data-metric="rms_db_mae" aria-pressed="false">RMS 包絡</button></div><label>彙整方式<select id="aggregate"><option value="macro">逐檔等權平均</option><option value="pooled">合併樣本計分</option></select></label></div>
+    <div class="filters"><label>Attack<select id="filter-attack"><option value="all">全部</option></select></label><label>Release<select id="filter-release"><option value="all">全部</option></select></label><label>Ratio<select id="filter-ratio"><option value="all">全部</option></select></label><label>Threshold<select id="filter-threshold"><option value="all">全部</option></select></label><button id="reset" class="quiet">重設篩選</button><span id="filter-count" role="status"></span></div>
+    <p id="metric-help" class="helper"></p>
+    <div id="comparison-table" class="table-wrap" role="region" aria-label="模型共同驗證總表" tabindex="0"></div>
+    <div class="reading"><p id="ranking-insight" aria-live="polite"></p><p id="pinn-insight"></p></div>
+  </section>
+
+  <details id="records" class="section disclosure"><summary><span><small>02 / RECORD DETAIL</small>逐檔檢視</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
+    <div class="detail-body"><div class="section-head compact"><p id="record-note" class="muted"></p><label>依哪個模型的誤差由高到低<select id="record-sort"></select></label></div>
+    <div id="record-table" class="table-wrap" role="region" aria-label="逐檔模型誤差" tabindex="0"></div>
+    <div class="pagination"><button id="prev" class="quiet">← 上一頁</button><span id="page-label" role="status"></span><button id="next" class="quiet">下一頁 →</button><button id="export-records" class="quiet">匯出篩選後逐檔 CSV</button></div></div>
+  </details>
+
+  <details id="training" class="section disclosure"><summary><span><small>03 / TRAINING RECORD</small>訓練紀錄與最佳輪次</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
+    <div class="detail-body"><div class="section-head compact"><p class="muted">MLP／GRU 顯示一輪完整訓練中的步數與單批 loss；S4、S6 與 S6＋PINN 顯示 16 輪驗證與最佳輪次。RiccardoVib 未在本次重新訓練。</p><label>檢視模型<select id="history-model"><option value="s6_pinn">S6＋TFiLM＋PINN</option><option value="mlp">MLP＋PINN</option><option value="gru">GRU＋PINN</option><option value="s6">S6＋TFiLM</option><option value="s4">S4＋TFiLM</option></select></label></div>
+    <p id="history-summary" class="helper"></p><div id="history-chart" class="chart"></div><p id="history-note" class="muted small"></p><div id="history-table" class="table-wrap" role="region" aria-label="訓練與驗證紀錄" tabindex="0"></div>
+    <div class="pagination"><button id="history-prev" class="quiet">← 上一頁</button><span id="history-page" role="status"></span><button id="history-next" class="quiet">下一頁 →</button><button id="export-history" class="quiet">匯出此模型紀錄 CSV</button></div></div>
+  </details>
+
+  <section id="protocol" class="section">
+    <div class="section-head"><div><p class="eyebrow">04 / METHOD & COVERAGE</p><h2>比較成立的範圍</h2></div></div>
+    <p class="muted">相同評分位置，不代表相同訓練量。以下列出每個模型的來源與已完成的評估；沒有執行的項目不補值、不混入排名。</p>
+    <div id="coverage-table" class="table-wrap" role="region" aria-label="模型來源及測試覆蓋狀態" tabindex="0"></div>
+    <p class="small muted coverage-note">長片段、訓練區間診斷、靜音專項及歷史短視窗分開列示；沒有跨片段加總的總冠軍。A1／A2／A3 是 A 的子區段，F 含重複掃頻，G 僅 495 檔，H 是 2 秒靜音。六模型皆沒有新的獨立測試。素材名稱是聲學與分類模型推定，仍待人工聽辨。</p>
+    <details class="method-detail"><summary>本次長片段與連續狀態 <span aria-hidden="true">＋</span></summary><div class="method-columns"><article><h3>A–H，同一段音訊比較七種方法</h3><p>A：90–107.7 秒掃頻／鼓／Bass；B：199.7–210 秒鼓；C：70–80 秒人聲；D：60–70 秒 Bass；E：35–40 秒吉他；F：149.4–160 秒掃頻與停頓；G：210–219.8 秒 Bass；H：33–35 秒近靜音。</p><p>A、B 是已用過的保留資料，C、D、E 來自訓練區間，F、G、H 個別診斷。G 排除缺少該時間範圍的 125 檔，其他片段各 620 檔。A 的三個素材子區段另可切換。</p></article><article><h3>先完整讀取 Dry 歷史，再計分</h3><p>電路、S4、S6、S6＋PINN 從錄音第 0 個樣本開始連續推論，跨計分片段保留狀態；沒有用 Wet 初始化。RiccardoVib 按其原生設計，每 16 個輸出樣本帶入前 16 個 Dry 樣本。尾端補齊 S4 的區塊後丟棄補零輸出。</p><p>固定原權重與電路參數；不重訓、不用新成績挑 checkpoint、不擬合增益或延遲。長片段 MR-STFT 使用 512／1,024／2,048；歷史短視窗是 256／512／1,024，兩者分數不直接相比。</p></article></div></details>
+    <details class="method-detail"><summary>資料怎麼切、視窗怎麼計分 <span aria-hidden="true">＋</span></summary><div class="method-columns"><article><h3>依聲音內容分組</h3><p>620 個 48 kHz 雙聲道 WAV，左 Dry、右 Wet。以 Dry 的音色變化與重複內容分組，同一素材群在不同旋鈕錄音中共用切分；不是隨機分檔。</p><p>共同時間軸的 90–107.7 秒、149.4–160 秒為驗證；199.7 秒至檔尾為測試，其餘訓練。一個錄音的邊界校正提前 0.75 秒。素材群由聲學推定，未經歌曲／演奏者標籤確認。</p></article><article><h3>歷史短視窗規格</h3><p>每檔兩個驗證區段，各取中央 5,120 樣本。前 4,096 樣本（85.33 ms）提供 Dry 歷史，後 1,024 樣本計分；共 1,269,760 個評分樣本。RiccardoVib 使用其原生 16 樣本歷史。</p><p>其他方法逐視窗重設內部狀態，再以 Dry 暖機。沒有額外輸出增益擬合或延遲校正；短暖機不足以代表完整 Attack／長 Release 行為。</p></article></div></details>
+    <details class="method-detail"><summary>五種誤差如何閱讀 <span aria-hidden="true">＋</span></summary><div class="definition-grid"><article><h3>ESR</h3><p>誤差能量／目標能量。分母下限為 N × 10⁻⁸；0.1 代表約 10% 能量比，不代表 90% 準確率。安靜素材可能產生較高相對誤差。</p></article><article><h3>MSE</h3><p>逐樣本差值平方的平均，保留原始振幅，對大的瞬間誤差較敏感。</p></article><article><h3>MAE</h3><p>逐樣本絕對差的平均；比 MSE 較不受少數巨大誤差主導。</p></article><article><h3>MR-STFT</h3><p>長片段 FFT 512／1,024／2,048；歷史短視窗 FFT 256／512／1,024。hop 為 1/4，periodic Hann、置中反射 padding。各解析度的頻譜收斂誤差＋log magnitude L1，再等權平均；不是百分比。</p></article><article><h3>RMS 包絡誤差</h3><p>10 ms 格點的 RMS 電平絕對差，單位 dB，下限 −100 dBFS；尾格按樣本數加權。</p></article><article><h3>兩種彙整方式</h3><p>逐檔平均讓每檔等權；合併 ESR 先加總誤差與目標能量再相除。其他合併指標依樣本數加權，不串接不連續片段。全部越低越好。</p></article></div></details>
+    <details class="method-detail"><summary>PINN、來源與本次整理紀錄 <span aria-hidden="true">＋</span></summary><div class="method-columns"><article><h3>PINN 的比較限制</h3><p>S6＋TFiLM＋PINN 預測 e／f／s，再由電路公式輸出；共用 C3 電流平衡與快、慢光學狀態約束。原 S6 直接學增益，本次同時變更輸出端與 loss，不能當成只增加物理 loss 的單變因比較。</p><p>MLP／GRU 的展示結果是學得參數後的數值求解；S6＋PINN 則直接使用網路預測的物理狀態。</p><p><a href="cl1b-circuit-and-pinn.md">電路與方程式 Markdown ↗</a> · <a href="cl1b-reduced-circuit.svg">簡化電路圖 ↗</a></p></article><article><h3>保留結果，移除重複介面</h3><p>主頁已移除早期 5 段試聽／盲測、部分模型的完整區段排名、獨立 S4／S6 與 S6＋PINN 摘要；它們沒有涵蓋相同的最新六模型比較。原始實驗檔案仍保留。</p><p><a href="https://github.com/RiccardoVib/CONDITIONED-MODELING-OF-OPTICAL-COMPRESSOR" target="_blank" rel="noopener">RiccardoVib 模型來源 ↗</a> · <a href="https://www.kaggle.com/datasets/riccardosimionato/tubetech-cl-1b" target="_blank" rel="noopener">Kaggle 資料來源 ↗</a></p><p class="small">RiccardoVib 的原始訓練素材可能重疊；本頁不宣稱其為未見資料上的泛化成績。</p></article></div><div id="provenance" class="provenance"></div><button id="export-json" class="quiet">匯出完整報告 JSON</button></details>
+  </section>
+  <footer><span>HT—1B / LOCAL RESEARCH</span><span id="built-at"></span></footer>
+</main><script id="benchmark-data" type="application/json">/*__DATA__*/</script><script>/*__SCRIPT__*/</script>
+</body></html>

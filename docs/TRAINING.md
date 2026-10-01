@@ -29,6 +29,8 @@
 
 這些 `controls` 是**模型的正規化控制值**；不要把 ratio 10、attack 4 直接放進去。資料集原始標籤應交由 `prepare` 解析，原標籤會保存在 metadata。
 
+Threshold 檔名相容 Kaggle 第 1 版的 `t_0/10/20/30/40` 與既有的 `t_0/-10/-20/-30/-40`，兩者均轉換為非正的 dB 值。原始檔名保存在 `metadata.original_filename`，解析後的值位於 `metadata.filename_parameters.threshold_db`。此相容處理只作用於 threshold，不改變 gain、原始檔名或音訊內容；其他 threshold 檔位仍會拒絕。
+
 也可用 `input: "dry.wav"`、`output: "wet.wav"` 代替 `stereo_pair`；兩檔都須是 mono、等長、相同取樣率。路徑相對於 manifest，或使用絕對路徑。程式拒絕空檔、非有限樣本、聲道／取樣率／長度不符，沒有靜默混音或重取樣。
 
 只有乾聲時可省略 output，但必須明確設定 `--data-weight 0`。這只能解既定方程式，沒有實機資料就不能辨識硬體特性。

@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1250" viewBox="0 0 1800 1250" role="img" aria-labelledby="title desc">
+<title id="title">HT-1B 目前程式的簡化等效電路</title>
+<desc id="desc">Manual 模式。輸入經 Rs 到節點 a，再經 Ratio 電阻到 b。a 的 Rt 及 b 的 Rg、GRE 均接地。a 的整流訊號控制 C3 電壓 e，進一步產生光學快慢狀態 f、s 及 GRE 導電度。b 經無記憶放大器產生 Wet。虛線為控制關係，並非導線。</desc>
+<rect width="1800" height="1250" fill="#f7f6f1"/>
+<text x="70" y="45" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="43" font-weight="700" fill="#203431">HT-1B｜目前模型的簡化等效電路</text>
+<text x="72" y="111" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="25" font-weight="400" fill="#5c6a65">Manual 模式 · 依現有程式繪製；這是灰箱模型，不是完整 CL-1B 維修電路圖。</text>
+<polyline points="72,169 145,169" fill="none" stroke="#22675b" stroke-width="4" stroke-linejoin="round"/>
+<text x="158" y="153" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="22" font-weight="400" fill="#22675b">音訊／電氣連接</text>
+<polyline points="435,169 510,169" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 7"/>
+<text x="523" y="153" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="22" font-weight="400" fill="#326a9d">偵測／控制關係（非導線）</text>
+<text x="1295" y="153" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#916122">狀態：e、f、s</text>
+<polyline points="70,204 1730,204" fill="none" stroke="#cbd3cc" stroke-width="2" stroke-linejoin="round"/>
+<text x="72" y="232" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="27" font-weight="700" fill="#22675b">01  音訊路徑與光控衰減</text>
+<polyline points="115,340 210,340" fill="none" stroke="#22675b" stroke-width="4" stroke-linejoin="round"/>
+<circle cx="115" cy="340" r="5" fill="#22675b"/>
+<text x="115" y="288" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="25" font-weight="700" fill="#22675b">Dry / u</text>
+<polyline points="210,340 239.5,340" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="315.5,340 345,340" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<rect x="239.5" y="327" width="76.0" height="26" fill="#f7f6f1" stroke="#22675b" stroke-width="3"/>
+<text x="277" y="291" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="400" fill="#22675b">Rs 100 kΩ</text>
+<polyline points="345,340 550,340" fill="none" stroke="#22675b" stroke-width="4" stroke-linejoin="round"/>
+<circle cx="400" cy="340" r="5" fill="#22675b"/>
+<circle cx="470" cy="340" r="5" fill="#22675b"/>
+<text x="470" y="291" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="28" font-weight="700" fill="#22675b">a</text>
+<polyline points="550,340 592.0,340" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="668.0,340 710,340" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<rect x="592.0" y="327" width="76.0" height="26" fill="#f7f6f1" stroke="#22675b" stroke-width="3"/>
+<text x="630" y="282" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="24" font-weight="700" fill="#22675b">Rratio</text>
+<text x="630" y="377" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="22" font-weight="400" fill="#5c6a65">0–10 kΩ</text>
+<polyline points="710,340 1210,340" fill="none" stroke="#22675b" stroke-width="4" stroke-linejoin="round"/>
+<circle cx="815" cy="340" r="5" fill="#22675b"/>
+<circle cx="1050" cy="340" r="5" fill="#22675b"/>
+<text x="910" y="292" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="28" font-weight="700" fill="#22675b">b</text>
+<polyline points="470,340 470,387.0" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="470,463.0 470,510" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<rect x="457" y="387.0" width="26" height="76.0" fill="#f7f6f1" stroke="#22675b" stroke-width="3"/>
+<polyline points="451,510 489,510" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="458,518 482,518" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="465,526 475,526" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<text x="501" y="417" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#22675b">Rt</text>
+<text x="501" y="453" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="22" font-weight="400" fill="#5c6a65">100 kΩ</text>
+<polyline points="815,340 815,387.0" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="815,463.0 815,510" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<rect x="802" y="387.0" width="26" height="76.0" fill="#f7f6f1" stroke="#22675b" stroke-width="3"/>
+<polyline points="796,510 834,510" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="803,518 827,518" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="810,526 820,526" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<text x="846" y="417" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#22675b">Rg</text>
+<text x="846" y="453" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="22" font-weight="400" fill="#5c6a65">100 kΩ</text>
+<polyline points="1050,340 1050,387.0" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1050,463.0 1050,510" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<rect x="1037" y="387.0" width="26" height="76.0" fill="#f7f6f1" stroke="#22675b" stroke-width="3"/>
+<polyline points="1031,510 1069,510" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1038,518 1062,518" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1045,526 1055,526" fill="none" stroke="#22675b" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="1021,465 1078,389" fill="none" stroke="#22675b" stroke-width="2" stroke-linejoin="round"/>
+<polygon points="1078,389 1075.5001541564059,401.75738103053544 1066.4528710468924,394.97191869840026" fill="#22675b"/>
+<text x="1100" y="442" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="24" font-weight="700" fill="#22675b">GRE</text>
+<text x="1100" y="474" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="20" font-weight="400" fill="#5c6a65">等效可變電阻</text>
+<rect x="1210" y="275" width="330" height="133" rx="12" fill="#ffffff" stroke="#22675b" stroke-width="2"/>
+<text x="1375" y="294" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="26" font-weight="700" fill="#22675b">Make-up＋輸出級</text>
+<text x="1375" y="335" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="400" fill="#203431">增益與 tanh 限幅</text>
+<text x="1375" y="369" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="19" font-weight="400" fill="#5c6a65">無記憶近似</text>
+<polyline points="1540,340 1700,340" fill="none" stroke="#22675b" stroke-width="4" stroke-linejoin="round"/>
+<polygon points="1700,340 1688.2941876694151,345.654551943446 1688.2941876694151,334.345448056554" fill="#22675b"/>
+<text x="1650" y="287" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="25" font-weight="700" fill="#22675b">Wet / y</text>
+<polyline points="400,340 400,560 45,560 45,754 95,754" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 7"/>
+<polygon points="95,754 83.2941876694152,759.654551943446 83.2941876694152,748.345448056554" fill="#326a9d"/>
+<text x="72" y="607" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="27" font-weight="700" fill="#326a9d">02  側鏈控制與三個物理狀態</text>
+<rect x="95" y="669" width="350" height="182" rx="12" fill="#ffffff" stroke="#326a9d" stroke-width="2"/>
+<text x="270" y="691" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="27" font-weight="700" fill="#326a9d">整流／Threshold</text>
+<text x="270" y="741" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="400" fill="#203431">取 |a|，調整偵測靈敏度</text>
+<text x="270" y="789" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="400" fill="#5c6a65">得到控制目標 d</text>
+<polyline points="445,754 555,754" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 7"/>
+<polygon points="555,754 543.2941876694152,759.654551943446 543.2941876694152,748.345448056554" fill="#326a9d"/>
+<text x="500" y="711" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#326a9d">d</text>
+<rect x="555" y="669" width="550" height="182" rx="12" fill="#ffffff" stroke="#326a9d" stroke-width="2"/>
+<text x="580" y="690" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="26" font-weight="700" fill="#326a9d">Attack／Release 包絡</text>
+<text x="580" y="740" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="400" fill="#203431">充電 iA ／放電 iR</text>
+<text x="580" y="779" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#916122">C3 · de/dt = iA - iR</text>
+<circle cx="989" cy="731" r="5" fill="#326a9d"/>
+<text x="1017" y="709" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="27" font-weight="700" fill="#916122">e</text>
+<polyline points="989,731 989,765" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="966,765 1012,765" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="966,777 1012,777" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="989,777 989,820" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="970,820 1008,820" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="977,828 1001,828" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round"/>
+<polyline points="984,836 994,836" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round"/>
+<text x="1019" y="767" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="21" font-weight="700" fill="#326a9d">C3</text>
+<text x="1019" y="797" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="18" font-weight="400" fill="#5c6a65">10 μF</text>
+<polyline points="1105,754 1240,754" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 7"/>
+<polygon points="1240,754 1228.2941876694151,759.654551943446 1228.2941876694151,748.345448056554" fill="#326a9d"/>
+<text x="1172" y="711" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="22" font-weight="700" fill="#326a9d">e → q</text>
+<rect x="1240" y="669" width="490" height="182" rx="12" fill="#ffffff" stroke="#326a9d" stroke-width="2"/>
+<text x="1485" y="691" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="25" font-weight="700" fill="#326a9d">光學元件的雙時間尺度模型</text>
+<text x="1485" y="741" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="25" font-weight="700" fill="#916122">f：快反應　／　s：慢反應</text>
+<text x="1485" y="789" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="400" fill="#203431">合成導電度 G_GRE</text>
+<polyline points="1485,669 1485,560 1237,560 1237,425 1067,425" fill="none" stroke="#326a9d" stroke-width="3" stroke-linejoin="round" stroke-dasharray="8 7"/>
+<polygon points="1067,425 1078.7058123305849,419.345448056554 1078.7058123305849,430.654551943446" fill="#326a9d"/>
+<text x="1380" y="522" dominant-baseline="text-before-edge" text-anchor="middle" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#326a9d">G_GRE ↑ → 衰減 ↑</text>
+<text x="95" y="887" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="22" font-weight="400" fill="#5c6a65">C3 支路保留二極體、Attack 電阻及帶偏壓的 Release 等效回路；圖中以充／放電電流合併表示。</text>
+<polyline points="70,941 1730,941" fill="none" stroke="#cbd3cc" stroke-width="2" stroke-linejoin="round"/>
+<text x="72" y="963" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="27" font-weight="700" fill="#916122">03  PINN 約束：讓預測的 e、f、s 符合這三條動態方程</text>
+<rect x="72" y="1013" width="525" height="103" rx="12" fill="#efeee5" stroke="#cbd3cc" stroke-width="2"/>
+<text x="94" y="1029" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#916122">電容電壓 e</text>
+<text x="94" y="1070" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="24" font-weight="400" fill="#203431">C3 · de/dt - iA + iR = 0</text>
+<rect x="622" y="1013" width="525" height="103" rx="12" fill="#efeee5" stroke="#cbd3cc" stroke-width="2"/>
+<text x="644" y="1029" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#916122">快光學狀態 f</text>
+<text x="644" y="1070" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="24" font-weight="400" fill="#203431">τf · df/dt + f - q = 0</text>
+<rect x="1172" y="1013" width="558" height="103" rx="12" fill="#efeee5" stroke="#cbd3cc" stroke-width="2"/>
+<text x="1194" y="1029" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="23" font-weight="700" fill="#916122">慢光學狀態 s</text>
+<text x="1194" y="1070" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="24" font-weight="400" fill="#203431">τs · ds/dt + s - q = 0</text>
+<text x="72" y="1143" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="22" font-weight="400" fill="#5c6a65">模型近似：輸入／輸出變壓器、真空管內部、噪聲與 C8 的快速動態未展開；GRE 採可辨識的等效模型。</text>
+<text x="72" y="1183" dominant-baseline="text-before-edge" text-anchor="start" font-family="Microsoft JhengHei, Noto Sans CJK TC, sans-serif" font-size="21" font-weight="400" fill="#5c6a65">依據：src/ht1b/equations.py · config.py · physicsnemo_model.py ｜ 電阻值為設定值，非本次學得參數。</text>
+</svg>

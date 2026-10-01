@@ -1,5 +1,7 @@
 > 此資料夾集中收錄訓練文件；操作指令仍在 `/Users/hikaritsai/HT-1B` 執行。文件副本整理日期：2026-09-25。
 
+Windows / RTX GPU 操作請見 [WSL GPU 訓練與演算法比較](GPU_TRAINING.md)，執行入口為 `pinn/run_gpu_training.py`。Kaggle 第 1 版的 threshold 正值檔名已由核心解析器相容處理，無需重新命名音檔。
+
 # HT-1B：標準訓練與電路求解流程
 
 本專案將 CL 1B 的縮減電路方程式用在兩條路徑：

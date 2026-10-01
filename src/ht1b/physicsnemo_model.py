@@ -53,6 +53,19 @@ class SymbolicOps:
         return b+(a-b)*h
 
 
+def circuit_residual_terms(states, derivatives, input_volts, params, controls, ops):
+    """Shared normalized ODE residuals for symbolic and batched Torch callers."""
+    e, f, s = states
+    de, df, ds = derivatives
+    result = evaluate((e, f, s), input_volts, params, controls, ops)
+    terms = {
+        'c3_kcl': (params.c3*de-result['ia']+result['ir'])*result['ra']/params.opamp_rail,
+        'gre_fast': result['tau_fast']*df+f-result['target'],
+        'gre_slow': result['tau_slow']*ds+s-result['target'],
+    }
+    return terms, result['output']/params.output_volts_per_fs
+
+
 class CircuitPDE(PDE):
     """Continuous ODE residuals; time derivatives supplied explicitly by caller.
 
@@ -69,12 +82,8 @@ class CircuitPDE(PDE):
         params=asdict(circuit)
         params.update({name:sp.Symbol(name,positive=True) for name in BOUNDS})
         p=SimpleNamespace(**params)
-        result=evaluate((e,f,s),u,p,controls,SymbolicOps)
-        self.equations={
-            'c3_kcl':(circuit.c3*e.diff(t)-result['ia']+result['ir'])*result['ra']/circuit.opamp_rail,
-            'gre_fast':result['tau_fast']*f.diff(t)+f-result['target'],
-            'gre_slow':result['tau_slow']*s.diff(t)+s-result['target'],
-        }
+        self.equations, _ = circuit_residual_terms(
+            (e,f,s), (e.diff(t),f.diff(t),s.diff(t)), u, p, controls, SymbolicOps)
         self.computations=self.make_computations()
 
 

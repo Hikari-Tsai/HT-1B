@@ -19,6 +19,9 @@ def parse_filename(path):
     match=PATTERN.match(Path(path).name)
     if not match: raise ValueError('Expected TubeTech_a_<0..4>_r_<0..4>_r_<ratio>_t_<threshold>_g_<gain>.wav')
     a,r,ratio,t,g=map(float,match.groups())
+    # Kaggle v1 omits the minus sign from threshold labels (t_10 means -10 dB).
+    # Normalize only threshold; gain retains its signed dB value.
+    t=-abs(t) if t else 0.0
     if a not in range(5) or r not in range(5) or ratio not in (2,4,6,8,10) or t not in (0,-10,-20,-30,-40):
         raise ValueError('Filename is outside the documented five-setting dataset')
     return dict(attack_index=int(a),release_index=int(r),ratio=int(ratio),threshold_db=t,gain_db=g)
@@ -36,6 +39,7 @@ def dataset_controls(labels,circuit,mode='manual'):
         'Attack/release labels 0..4 map to pot positions index/4; actual resistances are unmeasured.',
         'Ratio 2..10 maps linearly to the 0..10 kohm ratio pot; actual ratio response is not calibrated.',
         'Threshold 0..-40 maps to wiper fraction 0.01..1 (40 dB sensitivity span); absolute dBu calibration is unknown.',
+        'Threshold filename labels 10, 20, 30, 40 (Kaggle v1) mean -10, -20, -30, -40 dB; signed labels are also accepted.',
         f'Mode {mode} is supplied to this adapter; dataset description does not specify mode.',
         'Gain label is treated as dB makeup; analog input/output volts-per-FS use the selected config.',
     ]
@@ -59,7 +63,8 @@ def prepare_manifest(paths,output,circuit=None,mode='manual',seconds=None,delay_
         controls,notes=dataset_controls(labels,p,mode)
         rows.append(dict(id=path.stem,stereo_pair=str(path),split='train',controls=asdict(controls),
                          delay_samples=delay_samples,start_sample=0,stop_sample=stop,initial_state=[0,0,0],
-                         metadata={'source':'user-supplied CL-1B dataset','filename_parameters':labels,
+                         metadata={'source':'user-supplied CL-1B dataset','original_filename':path.name,
+                                   'filename_parameters':labels,
                                    'mapping_assumptions':notes,'original_frames':info.frames,
                                    'used_frames':stop,'initial_state_note':'Assumed fully released at recording start.'}))
     if not rows: raise ValueError('No input recordings')
