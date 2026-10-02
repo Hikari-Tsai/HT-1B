@@ -342,16 +342,22 @@ def build_legacy(output: Path) -> None:
     print(f"Built {output} ({output.stat().st_size / 1024**2:.1f} MiB)")
 
 
-def build(output: Path) -> None:
+def build(output: Path, *, public_site: bool = False) -> None:
     """Build the consolidated report; historical data remain in their run folders."""
     if __package__:
         from pinn.build_unified_comparison import build_report
     else:
         from build_unified_comparison import build_report
-    build_report(output, five_model_results())
+    build_report(output, five_model_results(),
+                 audio_base='audio/listening' if public_site else '../runs/pretrained-comparison/audio',
+                 write_metrics=not public_site)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "output/cl1b-comparison.html")
-    build(parser.parse_args().output)
+    parser.add_argument("--public-site", action="store_true",
+                        help="Build site/index.html with publishable audio paths and no metrics sidecar")
+    args = parser.parse_args()
+    output = ROOT / "site/index.html" if args.public_site else args.output
+    build(output, public_site=args.public_site)

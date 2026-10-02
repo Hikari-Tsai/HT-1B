@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>HT-1B｜六模型共同驗證</title><style>/*__STYLE__*/</style></head>
 <body>
 <a class="skip" href="#five-models">跳至模型比較</a>
-<header class="topbar"><a class="brand" href="#top">HT—1B <small>MODEL EVALUATION</small></a><nav aria-label="頁面導覽"><a href="#five-models">模型比較</a><a href="#records">逐檔資料</a><a href="#protocol">方法與範圍</a></nav><button id="theme" class="quiet">深色模式</button></header>
+<header class="topbar"><a class="brand" href="#top">HT—1B <small>MODEL EVALUATION</small></a><nav aria-label="頁面導覽"><a href="#five-models">模型比較</a><a href="#listening">試聽與圖表</a><a href="#records">逐檔資料</a><a href="#protocol">方法與範圍</a></nav><button id="theme" class="quiet">深色模式</button></header>
 <main id="top">
   <section class="intro"><div><p class="eyebrow">SAME AUDIO · SAME SCORING PROTOCOL</p><h1>六個模型，<br>一份共同比較。</h1><p class="lede">MLP、GRU、S4、S6、S6＋PINN 與 RiccardoVib。<br>以相同位置的實測 Wet 為目標，另列純演算法基準。</p></div><dl class="facts"><div><dt>目前評估錄音</dt><dd><span id="fact-files">—</span> <small>檔</small></dd></div><div><dt>共同評分位置</dt><dd><span id="fact-windows">—</span> <small>段</small></dd></div><div><dt>每段計分長度</dt><dd id="fact-length">—</dd></div></dl></section>
   <aside class="scope"><strong>探索性評估</strong><p id="scope-copy"></p></aside>
@@ -18,20 +18,34 @@
     <div class="reading"><p id="ranking-insight" aria-live="polite"></p><p id="pinn-insight"></p></div>
   </section>
 
-  <details id="records" class="section disclosure"><summary><span><small>02 / RECORD DETAIL</small>逐檔檢視</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
+  <details id="listening" class="section disclosure">
+    <summary><span><small>02 / LISTENING & DIAGNOSTICS</small>試聽與資料視覺化</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
+    <div class="detail-body">
+      <div class="section-head compact"><div><p class="muted">指標輪廓圖隨上方片段、旋鈕篩選與彙整方式更新；每條軸以該指標在目前範圍六模型的最高值正規化，中心較近表示誤差較低。</p></div><label>圖表模型<select id="profile-model"></select></label></div>
+      <div class="diagnostic-grid"><div class="panel"><h3>五項誤差輪廓</h3><div id="metric-profile" class="profile-chart" role="img" aria-label="目前模型的五項誤差輪廓圖"></div><p id="profile-note" class="small muted"></p></div><div class="panel"><h3>指標排名變化</h3><div id="rank-profile" class="rank-profile" role="img" aria-label="六模型在五項指標的排名圖"></div><p class="small muted">每欄第一名代表該項指標最低；純演算法基準不納入名次，仍顯示於總表。</p></div></div>
+      <div class="listen-head"><div><p class="eyebrow">SIX MODELS · FIVE MATCHED CLIPS</p><h3>六模型與演算法試聽</h3></div><p class="small muted">同一組五段、每段約 2 秒的素材，提供 Dry、實測 Wet、目前總表的六模型與純演算法；另保留「歷史 MLP 5,000 更新」供版本比較。所有音軌對齊 [16, 95,984) 樣本，模型由原錄音起點處理 Dry 並延續狀態。這不是 A–H 長片段重新評估，也不是新的獨立測試；各模型訓練預算不同。公開音檔是短片段與處理後輸出，來源為 <a href="https://www.kaggle.com/datasets/riccardosimionato/tubetech-cl-1b" target="_blank" rel="noopener">Riccardo Simionato 的 TubeTech CL-1B 資料集</a>，依 <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA 4.0</a> 標示與分享；詳見 <a href="AUDIO-ATTRIBUTION.md">授權與引用</a>。</p></div>
+      <div class="listen-controls"><label>片段<select id="listen-record"></select></label><label>音軌<select id="listen-track"></select></label><label>音量<input id="listen-volume" type="range" min="0" max="1" value="1" step="0.01"></label><label class="check"><input id="listen-loop" type="checkbox"> 循環</label></div>
+      <div class="audio-workbench"><button id="listen-play" class="primary">播放</button><span id="listen-time" class="mono">0.000 s</span><input id="listen-seek" type="range" min="0" max="1" value="0" step="0.001" aria-label="試聽播放位置"><a id="listen-download" class="quiet" download>下載 WAV</a></div>
+      <div class="wave-legend" aria-hidden="true"><span class="dry">Dry 輸入</span><span class="wet">實測 Wet</span><span class="selected">所選音軌</span><span class="difference">殘差與強度</span><span class="playhead">播放位置</span></div>
+      <canvas id="listen-waveform" class="listen-waveform" height="300" aria-label="同步顯示 Dry 輸入、實測 Wet 與所選模型輸出；下方橘色區域為模型輸出減實測 Wet 的帶正負方向殘差，橘色細棒顯示區段 RMS 強度；垂直線為播放位置" role="img" tabindex="0"></canvas>
+      <p class="small muted wave-caption">上半共用振幅尺度；下半顯示「所選音軌 − 實測 Wet」的殘差方向與區段 RMS 強度。點擊波形可跳至該時間。這是供聽察的顯示摘要，不是頁面列出的評分指標。</p><p id="listen-status" class="small muted" role="status">選擇音軌後按播放；切換音軌會維持相同時間位置。</p><audio id="listen-audio" preload="metadata"></audio>
+    </div>
+  </details>
+
+  <details id="records" class="section disclosure"><summary><span><small>03 / RECORD DETAIL</small>逐檔檢視</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
     <div class="detail-body"><div class="section-head compact"><p id="record-note" class="muted"></p><label>依哪個模型的誤差由高到低<select id="record-sort"></select></label></div>
     <div id="record-table" class="table-wrap" role="region" aria-label="逐檔模型誤差" tabindex="0"></div>
     <div class="pagination"><button id="prev" class="quiet">← 上一頁</button><span id="page-label" role="status"></span><button id="next" class="quiet">下一頁 →</button><button id="export-records" class="quiet">匯出篩選後逐檔 CSV</button></div></div>
   </details>
 
-  <details id="training" class="section disclosure"><summary><span><small>03 / TRAINING RECORD</small>訓練紀錄與最佳輪次</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
+  <details id="training" class="section disclosure"><summary><span><small>04 / TRAINING RECORD</small>訓練紀錄與最佳輪次</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
     <div class="detail-body"><div class="section-head compact"><p class="muted">MLP／GRU 顯示一輪完整訓練中的步數與單批 loss；S4、S6 與 S6＋PINN 顯示 16 輪驗證與最佳輪次。RiccardoVib 未在本次重新訓練。</p><label>檢視模型<select id="history-model"><option value="s6_pinn">S6＋TFiLM＋PINN</option><option value="mlp">MLP＋PINN</option><option value="gru">GRU＋PINN</option><option value="s6">S6＋TFiLM</option><option value="s4">S4＋TFiLM</option></select></label></div>
     <p id="history-summary" class="helper"></p><div id="history-chart" class="chart"></div><p id="history-note" class="muted small"></p><div id="history-table" class="table-wrap" role="region" aria-label="訓練與驗證紀錄" tabindex="0"></div>
     <div class="pagination"><button id="history-prev" class="quiet">← 上一頁</button><span id="history-page" role="status"></span><button id="history-next" class="quiet">下一頁 →</button><button id="export-history" class="quiet">匯出此模型紀錄 CSV</button></div></div>
   </details>
 
   <section id="protocol" class="section">
-    <div class="section-head"><div><p class="eyebrow">04 / METHOD & COVERAGE</p><h2>比較成立的範圍</h2></div></div>
+    <div class="section-head"><div><p class="eyebrow">05 / METHOD & COVERAGE</p><h2>比較成立的範圍</h2></div></div>
     <p class="muted">相同評分位置，不代表相同訓練量。以下列出每個模型的來源與已完成的評估；沒有執行的項目不補值、不混入排名。</p>
     <div id="coverage-table" class="table-wrap" role="region" aria-label="模型來源及測試覆蓋狀態" tabindex="0"></div>
     <p class="small muted coverage-note">長片段、訓練區間診斷、靜音專項及歷史短視窗分開列示；沒有跨片段加總的總冠軍。A1／A2／A3 是 A 的子區段，F 含重複掃頻，G 僅 495 檔，H 是 2 秒靜音。六模型皆沒有新的獨立測試。素材名稱是聲學與分類模型推定，仍待人工聽辨。</p>

@@ -1,6 +1,7 @@
 """Consolidated six-model report, one shared scoring protocol, one baseline."""
 from datetime import datetime, timezone
 import json
+import struct
 from pathlib import Path
 import numpy as np
 
@@ -10,11 +11,86 @@ RUN = ROOT/'runs/s6-tfilm-pinn-gpu-20260929'
 MODEL_KEYS = ('mlp','gru','s4','s6','s6_pinn','riccardovib')
 
 
+def wav_samples(path: Path) -> np.ndarray:
+    """Read the retained mono float32 WAVs without adding an audio dependency."""
+    raw = path.read_bytes()
+    if raw[:4] != b'RIFF' or raw[8:12] != b'WAVE':
+        raise ValueError(f'Invalid WAV: {path}')
+    position, fmt, audio = 12, None, None
+    while position + 8 <= len(raw):
+        kind, size = struct.unpack_from('<4sI', raw, position)
+        start = position + 8
+        if kind == b'fmt ':
+            fmt = struct.unpack_from('<HHIIHH', raw, start)
+        elif kind == b'data':
+            audio = raw[start:start+size]
+        position = start + size + (size & 1)
+    if fmt is None or audio is None or fmt[0] != 3 or fmt[1] != 1 or fmt[2] != 48000 or fmt[5] != 32:
+        raise ValueError(f'Expected 48 kHz mono float32 WAV: {path}')
+    return np.frombuffer(audio, dtype='<f4')
+
+
+def waveform_summary(samples: np.ndarray, reference: np.ndarray, bins: int = 640) -> dict:
+    """Non-reconstructable min/max display envelopes and RMS residual per bin."""
+    if len(samples) != len(reference):
+        raise ValueError('Audition tracks have different sample counts')
+    edges = np.linspace(0, len(samples), bins + 1, dtype=np.int64)
+    lows, highs, residual_lows, residual_highs, difference = [], [], [], [], []
+    for start, stop in zip(edges[:-1], edges[1:]):
+        segment = samples[start:stop].astype(np.float64)
+        residual = segment - reference[start:stop].astype(np.float64)
+        lows.append(round(float(segment.min()), 5))
+        highs.append(round(float(segment.max()), 5))
+        residual_lows.append(round(float(residual.min()), 5))
+        residual_highs.append(round(float(residual.max()), 5))
+        difference.append(round(float(np.sqrt(np.mean(residual * residual))), 5))
+    return dict(low=lows, high=highs, residual_low=residual_lows,
+                residual_high=residual_highs, diff_rms=difference)
+
+
+def historical_listening(audio_base: str = '../runs/pretrained-comparison/audio') -> dict:
+    """Expose the retained local-only five-clip audition without mixing it into rankings."""
+    source = ROOT/'runs/pretrained-comparison'
+    report = read(source/'comparison.json')
+    rendered = read(source/'audio/current-model-provenance.json')
+    common_sources = read(RUN/'common-validation/comparison.json')['sources']
+    for key in ('mlp','gru','s4','s6','s6_pinn'):
+        if rendered['models'][key]['source']['sha256'] != common_sources[key]['sha256']:
+            raise ValueError(f'Stale audition audio for {key}')
+    tracks = (
+        ('reference_dry', 'Dry input'),
+        ('reference_wet', '實測 Wet'),
+        ('mlp_full', 'MLP＋PINN · 完整訓練'),
+        ('gru_full', 'GRU＋PINN · 完整訓練'),
+        ('s4_tfilm', 'S4＋TFiLM · 最佳第 14 輪'),
+        ('s6_tfilm', 'S6＋TFiLM · 最佳第 8 輪'),
+        ('s6_tfilm_pinn', 'S6＋TFiLM＋PINN · 最佳第 15 輪'),
+        ('author_pretrained', 'RiccardoVib'),
+        ('pure_algorithm', '純演算法'),
+        ('ours_5000', '歷史 MLP · 5,000 更新（額外版本）'),
+    )
+    records = []
+    for row in report['records']:
+        audio = {}
+        waveforms = {}
+        reference = wav_samples(source/'audio'/'reference_wet'/f"{row['id']}.wav")
+        for key, label in tracks:
+            path = source/'audio'/key/f"{row['id']}.wav"
+            if not path.exists():
+                raise ValueError(f'Missing historical audition WAV: {path}')
+            audio[key] = dict(label=label, path=f'{audio_base}/{key}/{row["id"]}.wav')
+            waveforms[key] = waveform_summary(wav_samples(path), reference)
+        records.append(dict(id=row['id'], samples=row['samples_scored'], seconds=row['samples_scored']/48000,
+                            conditioning=row['conditioning'], audio=audio, waveform=waveforms))
+    return dict(scope='historical_five_clip_only', records=records,
+                note='Six current models, the algorithm baseline and one historical MLP version on five reused 2-second clips. This is not the A-H long-clip evaluation or an independent test.')
+
+
 def read(path):
     return json.loads(path.read_text(encoding='utf-8'))
 
 
-def build_report(output, common):
+def build_report(output, common, *, audio_base: str = '../runs/pretrained-comparison/audio', write_metrics: bool = True):
     if common is None or set(common['sources']) != {*MODEL_KEYS,'baseline'}:
         raise ValueError('Consolidated report requires all six models and the baseline')
     manifest = read(ROOT/'runs/full-corpus-gpu-20260925/manifest.json')
@@ -104,7 +180,8 @@ def build_report(output, common):
         model_keys=list(MODEL_KEYS),baseline_key='baseline',five_models=common,
         histories=histories,coverage=coverage,availability=availability,
         split_hours=manifest['hours_by_split'],split_samples=manifest['frames_by_split'],
-        cleanup=dict(removed_sections=['early five-clip audio and blind listening','partial full-corpus rankings',
+        listening=historical_listening(audio_base),
+        cleanup=dict(removed_sections=['blind listening and partial full-corpus rankings',
             'standalone S4/S6 comparison','standalone S6/PINN summary','duplicate metric definitions'],
             scope='Presentation cleanup only. No new inference, training or test scores. Source artifacts retained.'))
     long_path=ROOT/'runs/long-clip-evaluation-20260929/comparison.json'
@@ -128,13 +205,16 @@ def build_report(output, common):
         report['schema_version']=4
     payload=json.dumps(report,ensure_ascii=False,separators=(',',':'),allow_nan=False).replace('</','<\\/')
     html=(UI/'index.html').read_text(encoding='utf-8')
+    attribution_href = 'AUDIO-ATTRIBUTION.md' if output.parent == ROOT/'site' else '../site/AUDIO-ATTRIBUTION.md'
+    html=html.replace('href="AUDIO-ATTRIBUTION.md"',f'href="{attribution_href}"')
     html=html.replace('/*__DATA__*/',payload).replace('/*__STYLE__*/',(UI/'style.css').read_text(encoding='utf-8'))
     html=html.replace('/*__SCRIPT__*/',(UI/'core.js').read_text(encoding='utf-8')+'\n'+(UI/'app.js').read_text(encoding='utf-8'))
     if any(marker in html for marker in ('/*__DATA__*/','/*__STYLE__*/','/*__SCRIPT__*/')):
         raise ValueError('Unfilled HTML template')
     output.parent.mkdir(parents=True,exist_ok=True)
     temp=output.with_suffix('.html.tmp');temp.write_text(html,encoding='utf-8');temp.replace(output)
-    metrics=output.with_suffix('.metrics.json')
-    temp=metrics.with_suffix('.json.tmp');temp.write_text(json.dumps(report,ensure_ascii=False,indent=2,allow_nan=False),encoding='utf-8');temp.replace(metrics)
+    if write_metrics:
+        metrics=output.with_suffix('.metrics.json')
+        temp=metrics.with_suffix('.json.tmp');temp.write_text(json.dumps(report,ensure_ascii=False,indent=2,allow_nan=False),encoding='utf-8');temp.replace(metrics)
     print('Verified all six models + baseline, fixed artifact hashes, window signature, histories and historical test coverage.')
     print(f'Built consolidated report: {output} ({output.stat().st_size/1024**2:.2f} MiB)')

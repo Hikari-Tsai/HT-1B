@@ -45,11 +45,32 @@ assert.equal(C.recordCSV([],source.window_signature).split('\r\n').length,1);
 const markup=html.slice(0,html.indexOf('<script id="benchmark-data"'));
 const ids=[...markup.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
 assert.equal(ids.length,new Set(ids).size,'Duplicate IDs');
-for(const obsolete of ['listening','blind-test','five-cards','five-bars','architecture-cards','s6-pinn-study'])assert.ok(!ids.includes(obsolete));
-assert.ok(!/<audio|data:audio|<script[^>]+src=/i.test(html));
+for(const obsolete of ['blind-test','five-cards','five-bars','architecture-cards','s6-pinn-study'])assert.ok(!ids.includes(obsolete));
+assert.ok(!/data:audio|<script[^>]+src=/i.test(html),'Report must not embed audio or third-party scripts');
+assert.equal(data.listening.scope,'historical_five_clip_only');assert.equal(data.listening.records.length,5);
+const auditionTracks=['reference_dry','reference_wet','mlp_full','gru_full','s4_tfilm','s6_tfilm','s6_tfilm_pinn','author_pretrained','pure_algorithm','ours_5000'];
+for(const record of data.listening.records){
+ assert.deepEqual(Object.keys(record.audio),auditionTracks);
+ assert.deepEqual(Object.keys(record.waveform),Object.keys(record.audio));
+ for(const [key,wave] of Object.entries(record.waveform)){
+  for(const field of ['low','high','residual_low','residual_high','diff_rms'])assert.equal(wave[field].length,640);
+  assert.ok(wave.low.every((value,i)=>value<=wave.high[i]));
+  assert.ok(wave.residual_low.every((value,i)=>value<=wave.residual_high[i]));
+  assert.ok(wave.diff_rms.every(value=>Number.isFinite(value)&&value>=0));
+  if(key==='reference_wet')assert.ok(wave.diff_rms.every(value=>value===0)&&wave.residual_low.every(value=>value===0)&&wave.residual_high.every(value=>value===0));
+ }
+ assert.ok(record.waveform.reference_dry.diff_rms.some(value=>value>0));
+}
+for(const record of data.listening.records)for(const track of Object.values(record.audio)){
+ const wav=path.join(root,'output',track.path);
+ assert.ok(fs.existsSync(wav),`Missing local audition track: ${track.path}`);
+ const bytes=fs.readFileSync(wav);
+ assert.equal(bytes.toString('ascii',0,4),'RIFF');assert.equal(bytes.toString('ascii',8,12),'WAVE');
+ assert.equal(bytes.readUInt32LE(bytes.indexOf(Buffer.from('data'))+4)/4,record.samples,`Audio length mismatch: ${track.path}`);
+}
 for(const match of markup.matchAll(/href="([^"#]+)"/g))if(!/^https?:/.test(match[1]))assert.ok(fs.existsSync(path.join(root,'output',match[1])),`Missing ${match[1]}`);
 const elements=new Map(),downloads=[];
-function node(id){return {id,value:'',textContent:'',innerHTML:'',dataset:{},attributes:{},listeners:{},disabled:false,tagName:'DIV',open:false,setAttribute(k,v){this.attributes[k]=v;},addEventListener(k,fn){this.listeners[k]=fn;}};}
+function node(id){return {id,value:'',textContent:'',innerHTML:'',dataset:{},attributes:{},listeners:{},disabled:false,tagName:'DIV',open:false,paused:true,currentTime:0,duration:0,readyState:0,volume:1,loop:false,width:0,height:0,setAttribute(k,v){this.attributes[k]=v;},addEventListener(k,fn){this.listeners[k]=fn;},pause(){this.paused=true;},load(){},play(){this.paused=false;return Promise.resolve();},getBoundingClientRect(){return {width:800,height:248};},getContext(){return {setTransform(){},fillRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fillText(){}};}};}
 for(const id of ids)elements.set(id,node(id));
 const benchmark=node('benchmark-data');benchmark.textContent=JSON.stringify(data);elements.set('benchmark-data',benchmark);
 const get=id=>{if(!id)return null;assert.ok(elements.has(id),`Unknown element ${id}`);return elements.get(id);};
@@ -58,6 +79,7 @@ get('aggregate').value='macro';get('record-sort').value='s6_pinn';get('history-m
 const controls=Object.keys(C.METRICS).map(k=>{const n=node(k);n.dataset.metric=k;return n;});
 let currentBlob;
 const context=vm.createContext({ComparisonCore:C,console,Blob,URL:{createObjectURL(b){currentBlob=b;return 'blob:test';},revokeObjectURL(){}},setTimeout(fn){fn();},
+ getComputedStyle(){return {getPropertyValue(){return '#888';}}},
  localStorage:{getItem(){throw new Error('storage disabled');},setItem(){throw new Error('storage disabled');}},window:{location:{hash:'#records'},addEventListener(){}},
  document:{getElementById:get,querySelectorAll(s){assert.equal(s,'[data-metric]');return controls;},documentElement:{dataset:{}},body:{appendChild(){}},createElement(tag){assert.equal(tag,'a');return {click(){downloads.push({filename:this.download,blob:currentBlob});},remove(){}};}}
 });
