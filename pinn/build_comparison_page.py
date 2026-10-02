@@ -350,6 +350,7 @@ def build(output: Path, *, public_site: bool = False) -> None:
         from build_unified_comparison import build_report
     build_report(output, five_model_results(),
                  audio_base='audio/listening' if public_site else '../runs/pretrained-comparison/audio',
+                 instrument_audio_base='audio/instrument-excerpts' if public_site else '../site/audio/instrument-excerpts',
                  write_metrics=not public_site)
 
 

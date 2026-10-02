@@ -48,7 +48,8 @@ def waveform_summary(samples: np.ndarray, reference: np.ndarray, bins: int = 640
                 residual_high=residual_highs, diff_rms=difference)
 
 
-def historical_listening(audio_base: str = '../runs/pretrained-comparison/audio') -> dict:
+def historical_listening(audio_base: str = '../runs/pretrained-comparison/audio',
+                         instrument_audio_base: str = '../site/audio/instrument-excerpts') -> dict:
     """Expose the retained local-only five-clip audition without mixing it into rankings."""
     source = ROOT/'runs/pretrained-comparison'
     report = read(source/'comparison.json')
@@ -82,15 +83,23 @@ def historical_listening(audio_base: str = '../runs/pretrained-comparison/audio'
             waveforms[key] = waveform_summary(wav_samples(path), reference)
         records.append(dict(id=row['id'], samples=row['samples_scored'], seconds=row['samples_scored']/48000,
                             conditioning=row['conditioning'], audio=audio, waveform=waveforms))
-    return dict(scope='historical_five_clip_only', records=records,
-                note='Six current models, the algorithm baseline and one historical MLP version on five reused 2-second clips. This is not the A-H long-clip evaluation or an independent test.')
+    excerpt_manifest = ROOT/'site/audio/instrument-excerpts/manifest.json'
+    if excerpt_manifest.exists():
+        excerpts = read(excerpt_manifest)
+        for item in excerpts['records']:
+            audio = {key:dict(value, path=f'{instrument_audio_base}/{item["asset_id"]}/{key}.wav')
+                     for key,value in item['audio'].items()}
+            records.append(dict(item, audio=audio))
+    return dict(scope='historical_five_clip_plus_instrument_excerpts', records=records,
+                note='Five historical 2-second clips plus matched instrument excerpts. These reuse existing recordings and are for listening only, not independent test results.')
 
 
 def read(path):
     return json.loads(path.read_text(encoding='utf-8'))
 
 
-def build_report(output, common, *, audio_base: str = '../runs/pretrained-comparison/audio', write_metrics: bool = True):
+def build_report(output, common, *, audio_base: str = '../runs/pretrained-comparison/audio',
+                 instrument_audio_base: str = '../site/audio/instrument-excerpts', write_metrics: bool = True):
     if common is None or set(common['sources']) != {*MODEL_KEYS,'baseline'}:
         raise ValueError('Consolidated report requires all six models and the baseline')
     manifest = read(ROOT/'runs/full-corpus-gpu-20260925/manifest.json')
@@ -180,7 +189,7 @@ def build_report(output, common, *, audio_base: str = '../runs/pretrained-compar
         model_keys=list(MODEL_KEYS),baseline_key='baseline',five_models=common,
         histories=histories,coverage=coverage,availability=availability,
         split_hours=manifest['hours_by_split'],split_samples=manifest['frames_by_split'],
-        listening=historical_listening(audio_base),
+        listening=historical_listening(audio_base, instrument_audio_base),
         cleanup=dict(removed_sections=['blind listening and partial full-corpus rankings',
             'standalone S4/S6 comparison','standalone S6/PINN summary','duplicate metric definitions'],
             scope='Presentation cleanup only. No new inference, training or test scores. Source artifacts retained.'))

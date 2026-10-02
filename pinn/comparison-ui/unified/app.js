@@ -123,13 +123,16 @@
       $('provenance').innerHTML=`<p>目前評估：${esc(scope())}；長片段來源 <code>runs/long-clip-evaluation-20260929/comparison.json</code>。長片段從錄音起點連續帶入 Dry，RiccardoVib 依其原生 16 樣本歷史；無重新訓練。</p><p>長片段完成時間：${esc(data.long_form.completed_utc)}；長片段簽章：<code>${esc(data.long_form.window_signature)}</code></p>`+$('provenance').innerHTML.replace('共同資料：','歷史短視窗來源：').replace('視窗簽章：','目前選擇的視窗簽章：').replace('此處為全部區段時數，總表僅計分共同短視窗。','此處為原始切分區段時數，總表依上方片段選單計分。');
     }
   }
-  // The retained listening material is deliberately local paths, not embedded data:
-  // it keeps the shared/public report free of dataset audio while restoring the local review tool.
+  // Audio stays in separate short licensed WAVs; only compact waveform envelopes live in the report.
   const audition=data.listening;
   const listenAudio=$('listen-audio'), listenCanvas=$('listen-waveform'), listenCtx=listenCanvas.getContext('2d');
   let listenRecord=0, listenTrack='reference_wet', listenFrame=0;
   function trackEntries(){return Object.entries(audition.records[listenRecord].audio);}
   function auditionLabel(record){
+    if(record.title){
+      const span=record.start_seconds!==undefined?` · ${record.start_seconds.toFixed(1)}–${record.stop_seconds.toFixed(1)} s`:'';
+      return `${record.title}${span} · ${record.id}`;
+    }
     const c=record.conditioning||{};
     return `${record.id} · Attack ${c.attack ?? '—'} · Release ${c.release ?? '—'} · ${c.ratio ?? '—'}:1 · ${c.threshold ?? '—'} dB`;
   }
@@ -161,8 +164,8 @@
   function setListeningSource(preserve=true){
     const prior=preserve?listenAudio.currentTime:0,wasPlaying=!listenAudio.paused;
     const record=audition.records[listenRecord],entry=record.audio[listenTrack];listenAudio.pause();
-    listenAudio.onloadedmetadata=()=>{listenAudio.currentTime=Math.min(prior,Math.max(0,listenAudio.duration-.001));updateListenTime();drawListeningWave();$('listen-status').textContent=`已就緒：${entry.label} · ${record.seconds.toFixed(3)} 秒。所有音軌維持其原始振幅，未做音量正規化。`;if(wasPlaying)void playListening();};
-    listenAudio.src=entry.path;listenAudio.load();$('listen-status').textContent='正在載入本機 WAV…';updateListenTime();drawListeningWave();
+    listenAudio.onloadedmetadata=()=>{listenAudio.currentTime=Math.min(prior,Math.max(0,listenAudio.duration-.001));updateListenTime();drawListeningWave();$('listen-status').textContent=`已就緒：${record.title?record.title+' · ':''}${entry.label} · ${record.seconds.toFixed(3)} 秒。所有音軌維持其原始振幅，未做音量正規化。`;if(wasPlaying)void playListening();};
+    listenAudio.src=entry.path;listenAudio.load();$('listen-status').textContent='正在載入試聽 WAV…';updateListenTime();drawListeningWave();
   }
   async function playListening(){
     try{await listenAudio.play();$('listen-status').textContent='播放中；切換音軌將保留相同時間位置。';cancelAnimationFrame(listenFrame);drawListeningWave();}catch(error){$('listen-status').textContent=`無法播放：${error.message}`;}
@@ -210,7 +213,7 @@
   listenAudio.addEventListener('play',()=>{cancelAnimationFrame(listenFrame);drawListeningWave();updateListenTime();});
   listenAudio.addEventListener('pause',()=>{cancelAnimationFrame(listenFrame);drawListeningWave();updateListenTime();});
   listenAudio.addEventListener('timeupdate',updateListenTime);
-  listenAudio.addEventListener('error',()=>{$('listen-status').textContent='無法載入本機 WAV。請確認 runs/pretrained-comparison/audio 仍存在。';});
+  listenAudio.addEventListener('error',()=>{$('listen-status').textContent='無法載入試聽 WAV。請確認網頁與試聽音檔已完整部署。';});
   function setTheme(theme){document.documentElement.dataset.theme=theme;$('theme').textContent=theme==='dark'?'淺色模式':'深色模式';$('theme').setAttribute('aria-label',`切換${theme==='dark'?'淺':'深'}色模式`);}
   try{setTheme(localStorage.getItem('ht1b-report-theme')==='dark'?'dark':'light');}catch(_){setTheme('light');}
   $('theme').addEventListener('click',()=>{const theme=document.documentElement.dataset.theme==='dark'?'light':'dark';setTheme(theme);try{localStorage.setItem('ht1b-report-theme',theme);}catch(_){}});

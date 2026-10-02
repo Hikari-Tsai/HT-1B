@@ -47,7 +47,7 @@ const ids=[...markup.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]);
 assert.equal(ids.length,new Set(ids).size,'Duplicate IDs');
 for(const obsolete of ['blind-test','five-cards','five-bars','architecture-cards','s6-pinn-study'])assert.ok(!ids.includes(obsolete));
 assert.ok(!/data:audio|<script[^>]+src=/i.test(html),'Report must not embed audio or third-party scripts');
-assert.equal(data.listening.scope,'historical_five_clip_only');assert.equal(data.listening.records.length,5);
+assert.equal(data.listening.scope,'historical_five_clip_plus_instrument_excerpts');assert.equal(data.listening.records.length,10);
 const auditionTracks=['reference_dry','reference_wet','mlp_full','gru_full','s4_tfilm','s6_tfilm','s6_tfilm_pinn','author_pretrained','pure_algorithm','ours_5000'];
 for(const record of data.listening.records){
  assert.deepEqual(Object.keys(record.audio),auditionTracks);
@@ -136,7 +136,7 @@ for(const id of ['export-summary','export-records','export-json'])get(id).listen
  assert.equal((await downloads[0].blob.text()).split('\r\n').length,data.histories.mlp.rows.length+1);
  assert.equal((await downloads[1].blob.text()).split('\r\n').length,data.histories.gru.rows.length+1);
  assert.equal((await downloads[2].blob.text()).split('\r\n').length,8);
- assert.equal((await downloads[3].blob.text()).split('\r\n').length,3101);assert.deepEqual(JSON.parse(await downloads[4].blob.text()),data);
+ assert.equal((await downloads[3].blob.text()).split('\r\n').length,3101);assert.equal(JSON.stringify(JSON.parse(await downloads[4].blob.text())),JSON.stringify(data));
  console.log('PASS: 7 methods x 5 metrics x 2 aggregations; source parity; filters, pagination, histories, theme, CSV/JSON, unique sections and local links.');
  console.log('Node data/state checks only; no browser rendering claim.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
