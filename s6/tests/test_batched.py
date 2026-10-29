@@ -141,6 +141,70 @@ def test_batched_training_resumes_and_rejects_changed_lane_count(tmp_path):
         train_batched(m, cfg, tmp_path/'run', resume=tmp_path/'run/checkpoints/epoch-000002')
 
 
+class _NanGrad(torch.autograd.Function):
+    """Identity forward, NaN backward: a finite loss whose gradients are not."""
+    @staticmethod
+    def forward(ctx, x):
+        return x.clone()
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad*float('nan')
+
+
+def poison_updates(monkeypatch, calls):
+    """Make the scored_loss calls numbered in `calls` (1-based) produce NaN gradients."""
+    import s6.batched as batched
+    original, count = batched.scored_loss, [0]
+
+    def scored_loss(*args):
+        loss, sums, samples = original(*args)
+        count[0] += 1
+        return (_NanGrad.apply(loss) if count[0] in calls else loss), sums, samples
+    monkeypatch.setattr(batched, 'scored_loss', scored_loss)
+
+
+def test_nonfinite_gradient_skips_update_and_continues(tmp_path, monkeypatch):
+    from s6.models import AudioModel
+    from s6.batched import train_batched
+    m = write_manifest(tmp_path, wav(tmp_path), SPANS)
+    cfg = write_config(tmp_path, 's6_tfilm', 'b.json', batch_size=2, eval_batch_size=2)
+    clean = train_batched(m, cfg, tmp_path/'clean')
+    poison_updates(monkeypatch, {2})
+    report = train_batched(m, cfg, tmp_path/'run')
+    assert report['skipped_updates'] == 1
+    assert report['skipped'][0]['after_update'] == 1 and report['skipped'][0]['reset_lanes'] == 0
+    assert report['updates'] == clean['updates'] - 1
+    model = AudioModel.from_checkpoint(tmp_path/'run/checkpoints/epoch-000001/model.mdlus')
+    assert all(torch.isfinite(p).all() for p in model.parameters())
+    assert np.isfinite(report['validation']['esr'])
+
+
+def test_consecutive_nonfinite_updates_stop_training(tmp_path, monkeypatch):
+    import s6.batched as batched
+    m = write_manifest(tmp_path, wav(tmp_path), SPANS)
+    cfg = write_config(tmp_path, 's6_tfilm', 'b.json', batch_size=2, eval_batch_size=2)
+    monkeypatch.setattr(batched, 'MAX_CONSECUTIVE_SKIPS', 1)
+    poison_updates(monkeypatch, {1, 2})
+    with pytest.raises(ValueError, match='consecutive nonfinite'):
+        batched.train_batched(m, cfg, tmp_path/'run')
+
+
+def test_nonfinite_lanes_are_found_and_reset():
+    from s6.batched import finite_lanes, mask_state
+    lstm = torch.ones(2, 3, 4)        # [layers, batch, hidden]
+    ssm = torch.ones(3, 5, dtype=torch.complex64)
+    lstm[1, 2, 0] = float('inf')
+    ssm[0, 3] = float('nan')
+    state = [dict(h=lstm), (ssm, None)]
+    finite = finite_lanes(state, 3, 'cpu')
+    assert finite.tolist() == [False, True, False]
+    lstm_out, ssm_out = mask_state(state, finite)[0]['h'], mask_state(state, finite)[1][0]
+    assert torch.isfinite(lstm_out).all() and torch.isfinite(ssm_out).all()
+    assert (lstm_out[:, 1] == 1).all() and (lstm_out[:, [0, 2]] == 0).all()
+    assert (ssm_out[1] == 1).all() and (ssm_out[[0, 2]] == 0).all()
+
+
 cuda = pytest.mark.skipif(not torch.cuda.is_available(), reason='fused scan needs CUDA')
 
 

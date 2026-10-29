@@ -174,6 +174,27 @@ def prefetch(iterator, depth=8):
                 thread.join(.05)
 
 
+def _lane_dim(state, batch):
+    if state.shape[0] == batch:
+        return 0
+    if state.ndim >= 2 and state.shape[1] == batch:
+        return 1
+    raise ValueError(f'Cannot locate batch dimension in state {tuple(state.shape)}')
+
+
+def finite_lanes(state, batch, device):
+    """Bool [batch]: True where every state tensor of that lane is finite."""
+    finite = torch.ones(batch, dtype=torch.bool, device=device)
+    if torch.is_tensor(state):
+        dim = _lane_dim(state, batch)
+        flat = torch.isfinite(state.movedim(dim, 0).reshape(batch, -1)).all(1)
+        return finite & flat.to(device)
+    values = state.values() if isinstance(state, dict) else state if isinstance(state, (tuple, list)) else []
+    for value in values:
+        finite &= finite_lanes(value, batch, device)
+    return finite
+
+
 def mask_state(state, keep):
     """Zero the state of lanes where keep==0 (a fresh record), keep the others.
 
@@ -183,16 +204,12 @@ def mask_state(state, keep):
     if state is None:
         return None
     if torch.is_tensor(state):
-        batch = keep.shape[0]
-        if state.shape[0] == batch:
-            dim = 0
-        elif state.ndim >= 2 and state.shape[1] == batch:
-            dim = 1
-        else:
-            raise ValueError(f'Cannot locate batch dimension in state {tuple(state.shape)}')
+        dim = _lane_dim(state, keep.shape[0])
         shape = [1]*state.ndim
-        shape[dim] = batch
-        return state*keep.view(shape).to(state.dtype)
+        shape[dim] = keep.shape[0]
+        # where, not multiply: a NaN lane times zero would stay NaN
+        return torch.where(keep.view(shape).to(state.device), state, torch.zeros((), dtype=state.dtype,
+                                                                                device=state.device))
     if isinstance(state, tuple):
         return tuple(mask_state(v, keep) for v in state)
     if isinstance(state, list):
@@ -296,6 +313,9 @@ def _accelerate(model, device):
     return model
 
 
+MAX_CONSECUTIVE_SKIPS = 20  # beyond this the run is diverging, not hitting a rare spike
+
+
 def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
     """Explicit opt-in training; same artifacts and resume rules as training.train()."""
     config = load_batched_config(config_path)
@@ -344,7 +364,8 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
         order = list(range(len(train_records)))
         random.Random(options['seed']+epoch).shuffle(order)  # same permutation as train()
         sums = dict(loss=0., l1=0., esr=0., spectral=0.)
-        samples = updates = scored_chunks = 0
+        samples = updates = scored_chunks = streak = 0
+        skipped = []
         state = None
         for batch in prefetch(lane_batches(train_records, order, lanes, chunk,
                                            options['read_block_chunks'])):
@@ -360,12 +381,29 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
             prediction, state = model(x, controls, state, gain)
             loss, step_sums, step_samples = scored_loss(criterion, prediction, target, rows,
                                                         batch['valid'], chunk)
-            if not torch.isfinite(loss):
-                raise ValueError(f'Nonfinite loss at epoch {epoch}, update {updates+1}')
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), options['grad_clip'], error_if_nonfinite=True)
-            optimizer.step()
+            norm = None
+            if torch.isfinite(loss):
+                loss.backward()
+                norm = torch.nn.utils.clip_grad_norm_(model.parameters(), options['grad_clip'])
             state = detach_state(state)  # TBPTT keeps values, cuts gradient history
+            if norm is None or not torch.isfinite(norm):
+                # Skip this update: parameters and AdamW moments stay untouched; lanes whose
+                # carried state went nonfinite restart from zero state at their current offset.
+                optimizer.zero_grad(set_to_none=True)
+                finite = finite_lanes(state, lanes, device)
+                state = mask_state(state, finite)
+                event = dict(epoch=epoch, after_update=updates,
+                             loss=loss.item() if torch.isfinite(loss) else None,
+                             reset_lanes=int((~finite).sum()))
+                skipped.append(event)
+                streak += 1
+                print(json.dumps(dict(skipped_update=event)), flush=True)
+                if streak > MAX_CONSECUTIVE_SKIPS:
+                    raise ValueError(f'{streak} consecutive nonfinite updates at epoch {epoch}, '
+                                     f'update {updates+1}')
+                continue
+            streak = 0
+            optimizer.step()
             updates += 1
             scored_chunks += len(rows)
             samples += step_samples
@@ -382,6 +420,7 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
         improved = validation['esr'] < best
         best = min(best, validation['esr'])
         report = dict(epoch=epoch, updates=updates, scored_chunks=scored_chunks, batch_size=lanes,
+                      skipped_updates=len(skipped), skipped=skipped,
                       train={k: v/samples for k, v in sums.items()},
                       validation=validation, best_validation_esr=best, seconds=time.monotonic()-begun)
         checkpoint = save_epoch(output, model, optimizer, epoch=epoch, config=config,
@@ -393,7 +432,7 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
         _json_atomic(output/'report.json', report)
         with (output/'history.jsonl').open('a') as stream:
             stream.write(json.dumps(report, allow_nan=False)+'\n')
-        print(json.dumps({k: v for k, v in report.items() if k != 'validation'} |
+        print(json.dumps({k: v for k, v in report.items() if k not in ('validation', 'skipped')} |
                          dict(validation_esr=validation['esr'])), flush=True)
     return report
 

@@ -297,6 +297,8 @@ python -m s6 evaluate data/s6-v3-intervals.json --checkpoint runs/<dir>/checkpoi
 
 續訓規則與 `train` 相同，只能提高 `epochs`；`batch_size` 等其他設定改變時會拒絕續訓。
 
+遇到非有限的 loss 或梯度範數時，`train-batched` 會跳過那次更新，參數與 AdamW 狀態不變，並把狀態已變成非有限值的 lane 歸零。每次跳過都會在 log 印一行 `skipped_update`，epoch 報告也記錄 `skipped_updates` 與 `skipped`。連續跳過超過 20 次（`MAX_CONSECUTIVE_SKIPS`）就停止並報錯，因為那代表模型已經發散。
+
 L40S（與其他使用者共用 GPU6）實測，不含讀檔等待：
 
 | 模型 | batch | 每次更新 | 估計每 epoch | 記憶體峰值 |
@@ -306,6 +308,20 @@ L40S（與其他使用者共用 GPU6）實測，不含讀檔等待：
 | S4＋TFiLM | 128 | 0.026 s | 約 17 分鐘 | 0.7 GB |
 
 正式訓練兩個 config 都用 batch 128／eval 128。S6 在 batch 256 時，因 GPU6 上其他程式已占用約 42 GB 而記憶體不足，所以降為 128。兩個模型同時在 GPU6 上跑，第 1 個 epoch（39,381 次更新，含驗證）實際耗時：S4 約 73 分鐘，S6 約 62 分鐘。第 1 個 epoch 的驗證 ESR：S4 1.047，S6 0.062。
+
+### 學習率與 batch 比較（2026-10-29，進行中）
+
+每組只跑一個 seed。驗證 ESR 依樣本數加權，與先前六模型比較用的 macro ESR 不同，兩者不能直接比較。
+
+| config | 已跑 epoch | 最佳驗證 ESR | 觀察 |
+|---|---:|---:|---|
+| S6 lr 1e-3、batch 128（`neural-s6-tfilm-batched.json`） | 23 | 0.033（epoch 9） | 訓練 loss 多次暴衝，最高約 2×10¹¹；驗證 ESR 一度到 71.7；epoch 24 連續非有限梯度而停止 |
+| S6 lr 1e-3、batch 32（`-b32.json`） | 4 | 0.029（epoch 3） | 一樣暴衝；epoch 5 連續非有限梯度而停止；每 epoch 約 50 分鐘 |
+| S6 lr 3e-4、batch 128（`-lr3e-4.json`） | 21 | 0.029（epoch 16） | 沒有暴衝，也沒有跳過的更新，訓練 loss 0.105 → 0.084 |
+| S4 lr 1e-3、batch 128（`neural-s4-tfilm-batched.json`） | 32 | 0.137（epoch 15） | 驗證 ESR 在 0.14–1.03 之間跳動 |
+| S4 lr 3e-4、batch 128（`-lr3e-4.json`） | 10 | 0.186（epoch 10） | 仍會跳動，尚無結論 |
+
+S6 用 lr 1e-3 會發散，batch 改小不能解決，lr 3e-4 則保持穩定。S4 的跳動目前還不能歸因於 learning rate。
 
 v3 的每個區段各自從頭暖機 1.024 秒，不承接同一原始檔前一段的歷史，約占 train 樣本的 8%，這些樣本不計分。這與原 `train` 對每筆紀錄的處理一致。
 
