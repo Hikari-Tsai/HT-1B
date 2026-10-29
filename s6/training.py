@@ -28,12 +28,14 @@ TRAIN_DEFAULTS = dict(sample_rate=48000, chunk_samples=1024, warmup_samples=4915
                       spectral_weight=.1, log_every_chunks=100)
 
 
-def load_config(path):
+def load_config(path, extra_training=None):
+    """extra_training: additional allowed training fields with defaults (batched trainer)."""
     document = json.loads(Path(path).read_text())
     if not isinstance(document, dict) or set(document)-{'model', 'training'}:
         raise ValueError('Config accepts only model and training sections')
     result = {}
-    for section, defaults in [('model', MODEL_DEFAULTS), ('training', TRAIN_DEFAULTS)]:
+    for section, defaults in [('model', MODEL_DEFAULTS),
+                              ('training', {**TRAIN_DEFAULTS, **(extra_training or {})})]:
         values = document.get(section, {})
         if not isinstance(values, dict) or set(values)-set(defaults):
             raise ValueError(f'Unknown {section} config fields')

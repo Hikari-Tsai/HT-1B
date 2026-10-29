@@ -15,13 +15,15 @@ def main(argv=None):
     prepare.add_argument('--validation-fraction', type=float, default=.2)
     prepare.add_argument('--gap-seconds', type=float, default=1.)
     prepare.add_argument('--delay-samples', type=int, default=0)
-    for command in ('check', 'train'):
-        p = sub.add_parser(command, help='Read-only forward check; no optimizer' if command == 'check'
-                           else 'Explicitly start chronological TBPTT training')
+    helps = {'check': 'Read-only forward check; no optimizer',
+             'train': 'Explicitly start chronological TBPTT training',
+             'train-batched': 'TBPTT over batch_size parallel record streams (fused CUDA scan)'}
+    for command, text in helps.items():
+        p = sub.add_parser(command, help=text)
         p.add_argument('manifest')
         p.add_argument('--config', required=True)
         p.add_argument('--device', choices=('cpu', 'cuda'), default='cpu')
-        if command == 'train':
+        if command != 'check':
             p.add_argument('--output', required=True)
             p.add_argument('--resume', help='Latest completed epoch directory')
     evaluate = sub.add_parser('evaluate', help='Score a completed checkpoint without training')
@@ -30,6 +32,7 @@ def main(argv=None):
     evaluate.add_argument('--split', choices=('train', 'validation', 'test'), default='validation')
     evaluate.add_argument('--device', choices=('cpu', 'cuda'), default='cpu')
     evaluate.add_argument('--output', help='Optional new JSON report; otherwise print only')
+    evaluate.add_argument('--lanes', type=int, help='Stream this many records at once (fused scan on CUDA)')
     args = parser.parse_args(argv)
     try:
         if args.command == 'prepare':
@@ -49,11 +52,21 @@ def main(argv=None):
         elif args.command == 'train':
             from .training import train
             train(args.manifest, args.config, args.output, device=args.device, resume=args.resume)
+        elif args.command == 'train-batched':
+            from .batched import train_batched
+            train_batched(args.manifest, args.config, args.output, device=args.device, resume=args.resume)
         else:
-            from .training import evaluate_checkpoint
             if args.output and Path(args.output).exists():
                 raise ValueError('Report already exists; choose a new output path')
-            report = evaluate_checkpoint(args.manifest, args.checkpoint, split=args.split, device=args.device)
+            if args.lanes is not None:
+                if args.lanes < 1:
+                    raise ValueError('--lanes must be positive')
+                from .batched import evaluate_checkpoint_batched
+                report = evaluate_checkpoint_batched(args.manifest, args.checkpoint, split=args.split,
+                                                     device=args.device, lanes=args.lanes)
+            else:
+                from .training import evaluate_checkpoint
+                report = evaluate_checkpoint(args.manifest, args.checkpoint, split=args.split, device=args.device)
             text = json.dumps(report, indent=2, allow_nan=False)
             if args.output:
                 path = Path(args.output)

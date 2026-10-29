@@ -274,6 +274,39 @@ python -m pytest s6/tests/test_neural.py -q
 | `s6/models.py` | PhysicsNeMo AudioModel 與兩套架構 |
 | `s6/losses.py` | 波形與 multi-resolution STFT loss |
 | `s6/training.py` | TBPTT、validation、checkpoints、續訓與唯讀檢查 |
+| `s6/batched.py` | 多錄音並行 TBPTT 與批次驗證（`train-batched`） |
+| `s6/fused_scan.py` | 含 backward 的 Triton selective scan，訓練／推論共用 |
+| `s6/v3_manifest.py` | 將 v3 全資料清單的內容分組區段轉成 s6 清單 |
 | `s6/__main__.py` | CLI |
+
+## 8. 加速訓練：`train-batched`（2026-10-28）
+
+原 `train` 是 batch=1，S6 的 selective scan 又是逐 sample 的 Python 迴圈。在 L40S 上實測，完整 v3 資料一個 epoch 估計需要：S4 約 55 小時，S6 約 47 天。`train-batched` 在不改模型、資料切分、loss 或 checkpoint 格式的前提下，做了三項改動：
+
+- **A. 多錄音並行**：`batch_size` 條錄音同時串流，每條的行為與 `train` 相同：時間順序、跨 chunk 保留狀態，換錄音時歸零並重新暖機。某條錄音結束後，由同一個每輪打亂的順序補入下一筆。每次更新取所有計分 lane 的單 chunk loss 平均。`batch_size=1` 與 `train` 逐步一致，有測試覆蓋。較大的 batch 會讓每輪更新次數約減為 1/batch，learning rate 沿用 0.001，尚未重新調整。
+- **B. 融合 scan**：`s6/fused_scan.py` 以 Triton 同時實作前向與反向（adjoint）遞迴，取代 Python 迴圈。CUDA 測試已核對輸出、最終狀態及全部參數梯度與原實作一致；CPU 仍使用原參考迴圈。
+- **C. 批次驗證**：用 `eval_batch_size` 條錄音並行，配合融合 scan 計算驗證指標。計算方式與 `evaluate_records` 相同，逐錄音以樣本數加權。
+
+```bash
+python -m s6.v3_manifest runs/full-corpus-20260925-v3/manifest.json data/tubetech-cl-1b-v1 data/s6-v3-intervals.json
+python -m s6 train-batched data/s6-v3-intervals.json \
+  --config s6/configs/neural-s6-tfilm-batched.json --output runs/<new-dir> --device cuda
+python -m s6 evaluate data/s6-v3-intervals.json --checkpoint runs/<dir>/checkpoints/epoch-000001 \
+  --split validation --device cuda --lanes 256
+```
+
+續訓規則與 `train` 相同，只能提高 `epochs`；`batch_size` 等其他設定改變時會拒絕續訓。
+
+L40S（與其他使用者共用 GPU6）實測，不含讀檔等待：
+
+| 模型 | batch | 每次更新 | 估計每 epoch | 記憶體峰值 |
+|---|---:|---:|---:|---:|
+| S6＋TFiLM | 256 | 0.026 s | 約 16 分鐘 | 1.9 GB |
+| S4＋TFiLM | 256 | 0.029 s | 約 18 分鐘 | 1.4 GB |
+| S4＋TFiLM | 128 | 0.026 s | 約 17 分鐘 | 0.7 GB |
+
+正式訓練兩個 config 都用 batch 128／eval 128。S6 在 batch 256 時，因 GPU6 上其他程式已占用約 42 GB 而記憶體不足，所以降為 128。兩個模型同時在 GPU6 上跑，第 1 個 epoch（39,381 次更新，含驗證）實際耗時：S4 約 73 分鐘，S6 約 62 分鐘。第 1 個 epoch 的驗證 ESR：S4 1.047，S6 0.062。
+
+v3 的每個區段各自從頭暖機 1.024 秒，不承接同一原始檔前一段的歷史，約占 train 樣本的 8%，這些樣本不計分。這與原 `train` 對每筆紀錄的處理一致。
 
 研究來源：[NablaFX](https://github.com/mcomunita/nablafx)、[Frontiers 音效建模比較](https://www.frontiersin.org/journals/signal-processing/articles/10.3389/frsip.2025.1580395/full)、[Riccardo 光學壓縮器 S6 論文](https://arxiv.org/abs/2408.12549)、[Mamba](https://arxiv.org/abs/2312.00752)。
