@@ -13,7 +13,7 @@ from .layers import S4FiLMBlock, S6Block, CompressorConditioning
 class AudioModel(Module):
     def __init__(self, architecture='s4_tfilm', width=16, state_dim=32, blocks=8,
                  film_block=128, context=64, spectrum_dim=8, conv_kernel=4,
-                 expansion=2):
+                 expansion=2, output_gain='linear'):
         super().__init__(meta=ModelMetaData(auto_grad=True,
                                           amp=False, jit=False, cuda_graphs=False))
         if architecture not in ('s4_tfilm', 's6_tfilm'):
@@ -24,9 +24,13 @@ class AudioModel(Module):
                                 expansion=expansion).items():
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
                 raise ValueError(f'{name} must be a positive integer')
+        if output_gain not in ('linear', 'bounded'):
+            raise ValueError('output_gain must be linear or bounded')
+        if output_gain == 'bounded' and architecture != 's6_tfilm':
+            raise ValueError('output_gain applies only to s6_tfilm (S4 output is tanh)')
         if architecture == 's6_tfilm' and blocks != 2:
             raise ValueError('s6_tfilm uses exactly two S6 blocks around the conditioning stage')
-        self.architecture, self.context = architecture, context
+        self.architecture, self.context, self.output_gain = architecture, context, output_gain
         self.required_multiple = film_block if architecture == 's4_tfilm' else 1
         if architecture == 's4_tfilm':
             self.input = nn.Linear(1, width)
@@ -78,8 +82,10 @@ class AudioModel(Module):
             z, first = self.first(z, previous.get('first'))
             z, condition = self.condition(z, spectrum, controls, previous.get('condition'))
             z, second = self.second(z, previous.get('second'))
-            # Linear gain with unity offset, NOT sigmoid and never wet/dry targets.
-            gain = 1+self.output(z).squeeze(-1)
+            # linear: unity-offset gain, unbounded (can grow silently during near-silence
+            # and spike at the next onset). bounded: 2*sigmoid, gain in (0, 2), still 1 at init.
+            raw = self.output(z).squeeze(-1)
+            gain = 2*torch.sigmoid(raw) if self.output_gain == 'bounded' else 1+raw
             wet = dry*gain
             next_state = dict(history=audio[:, -(self.context-1):] if self.context > 1 else audio[:, :0],
                               first=first, condition=condition, second=second)

@@ -21,7 +21,8 @@ from .models import AudioModel
 
 
 MODEL_DEFAULTS = dict(architecture='s4_tfilm', width=16, state_dim=32, blocks=8,
-                      film_block=128, context=64, spectrum_dim=8, conv_kernel=4, expansion=2)
+                      film_block=128, context=64, spectrum_dim=8, conv_kernel=4, expansion=2,
+                      output_gain='linear')
 TRAIN_DEFAULTS = dict(sample_rate=48000, chunk_samples=1024, warmup_samples=49152,
                       epochs=50, learning_rate=.001, weight_decay=0., grad_clip=1.,
                       seed=7, fft_sizes=[256, 512, 1024], l1_weight=1., esr_weight=.1,
@@ -43,10 +44,12 @@ def load_config(path, extra_training=None):
     m, t = result['model'], result['training']
     if m['architecture'] == 's6_tfilm' and 'blocks' not in document.get('model', {}):
         m['blocks'] = 2
-    for name in set(m)-{'architecture'}:
+    for name in set(m)-{'architecture', 'output_gain'}:
         _positive_integer(m[name], f'model.{name}')
     if m['architecture'] not in ('s4_tfilm', 's6_tfilm') or (m['architecture'] == 's6_tfilm' and m['blocks'] != 2):
         raise ValueError('Choose s4_tfilm or s6_tfilm (exactly two blocks for S6)')
+    if m['output_gain'] not in ('linear', 'bounded') or (m['output_gain'] == 'bounded' and m['architecture'] != 's6_tfilm'):
+        raise ValueError('output_gain must be linear, or bounded for s6_tfilm')
     for name in ('sample_rate', 'chunk_samples', 'epochs', 'log_every_chunks'):
         _positive_integer(t[name], name)
     for name in ('warmup_samples', 'seed'):
@@ -196,9 +199,12 @@ def save_epoch(output, model, optimizer, *, epoch, config, signature, best_esr, 
     return destination
 
 
-def _resume_config(config):
+def _resume_config(config, training_defaults=None):
     # Increasing the TOTAL epoch target is the only allowed configuration change.
-    return dict(model=config['model'], training={k: v for k, v in config['training'].items() if k != 'epochs'})
+    # Defaults fill fields added after a checkpoint was written, so old runs still resume.
+    training = {**(training_defaults or {}), **config['training']}
+    return dict(model={**MODEL_DEFAULTS, **config['model']},
+                training={k: v for k, v in training.items() if k != 'epochs'})
 
 
 def _move(value, device):
@@ -213,7 +219,7 @@ def _move(value, device):
     return value
 
 
-def load_resume(output, resume, config, signature):
+def load_resume(output, resume, config, signature, training_defaults=None):
     """Read and validate an epoch bundle before creating an optimizer."""
     output, resume = Path(output).resolve(), Path(resume).resolve()
     if resume.parent != output/'checkpoints':
@@ -224,7 +230,7 @@ def load_resume(output, resume, config, signature):
     restored = torch.load(resume/'training.pt', map_location='cpu', weights_only=True)
     if restored.get('format_version') != 1 or restored['data_signature'] != signature:
         raise ValueError('Resume data signature mismatch')
-    if _resume_config(restored['config']) != _resume_config(config):
+    if _resume_config(restored['config'], training_defaults) != _resume_config(config, training_defaults):
         raise ValueError('Resume config mismatch; only total epochs may change')
     return restored
 

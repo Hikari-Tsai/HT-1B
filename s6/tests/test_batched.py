@@ -260,3 +260,61 @@ def test_accelerated_model_matches_reference_model():
     torch.testing.assert_close(outputs[1][0], outputs[0][0], atol=1e-5, rtol=1e-5)
     for g, r in zip(outputs[1][1], outputs[0][1]):
         torch.testing.assert_close(g, r, atol=2e-4, rtol=2e-4)
+
+
+def test_bounded_gain_stays_in_range_and_starts_at_unity():
+    from s6.models import AudioModel
+    torch.manual_seed(3)
+    x = torch.randn(2, 40)*.3
+    p = torch.tensor([[.5, .5, 0., 1.], [.2, .7, .6, .3]])
+    model = AudioModel(architecture='s6_tfilm', output_gain='bounded', **MODEL).eval()
+    with torch.no_grad():
+        model.output.weight.zero_()
+        wet, _ = model(x, p)
+        torch.testing.assert_close(wet, x)  # 2*sigmoid(0) = 1, like 1+0 for linear
+        model.output.bias.fill_(50.)       # a huge raw output that would be a gain of 51
+        wet, _ = model(x, p)
+    assert (wet.abs() <= 2*x.abs()+1e-7).all()
+    with pytest.raises(ValueError, match='output_gain'):
+        AudioModel(architecture='s4_tfilm', output_gain='bounded', **MODEL)
+    with pytest.raises(ValueError, match='output_gain'):
+        AudioModel(architecture='s6_tfilm', output_gain='tanh', **MODEL)
+
+
+def test_configs_written_before_new_fields_still_resume():
+    from s6.training import _resume_config, MODEL_DEFAULTS
+    from s6.batched import BATCH_DEFAULTS, SELECTION_DEFAULTS
+    defaults = BATCH_DEFAULTS | SELECTION_DEFAULTS
+    current = dict(model=dict(MODEL_DEFAULTS), training=dict(epochs=2, seed=7, selection='pooled_esr'))
+    old = dict(model={k: v for k, v in MODEL_DEFAULTS.items() if k != 'output_gain'},
+               training=dict(epochs=1, seed=7))
+    assert _resume_config(old, defaults) == _resume_config(current, defaults)
+    changed = dict(current, training=dict(current['training'], selection='macro_esr'))
+    assert _resume_config(old, defaults) != _resume_config(changed, defaults)
+
+
+def test_macro_selection_picks_lowest_per_record_mean(tmp_path):
+    from s6.batched import train_batched
+    spans = [('train', 0, 100), ('train', 110, 190), ('validation', 200, 260), ('validation', 270, 400)]
+    m = write_manifest(tmp_path, wav(tmp_path), spans)
+    cfg = write_config(tmp_path, 's6_tfilm', 'b.json', batch_size=2, eval_batch_size=2,
+                       selection='macro_esr', learning_rate=.02)
+    doc = json.loads(cfg.read_text())
+    doc['model']['output_gain'] = 'bounded'
+    doc['training']['epochs'] = 3
+    cfg.write_text(json.dumps(doc))
+    train_batched(m, cfg, tmp_path/'run')
+    history = [json.loads(line) for line in (tmp_path/'run/history.jsonl').read_text().splitlines()]
+    for report in history:
+        v = report['validation']
+        esr = [r['esr'] for r in v['records'].values()]
+        assert v['macro_esr'] == pytest.approx(np.mean(esr)) and v['max_esr'] == pytest.approx(max(esr))
+        assert report['selection'] == 'macro_esr'
+    best = json.loads((tmp_path/'run/best.json').read_text())
+    scores = [r['validation']['macro_esr'] for r in history]
+    assert best['epoch'] == 1+int(np.argmin(scores))
+    assert best['selection'] == 'macro_esr' and best['validation_score'] == pytest.approx(min(scores))
+    with pytest.raises(ValueError, match='selection'):
+        doc['training']['selection'] = 'max_esr'
+        cfg.write_text(json.dumps(doc))
+        train_batched(m, cfg, tmp_path/'other')

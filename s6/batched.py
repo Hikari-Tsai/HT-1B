@@ -9,7 +9,10 @@ update for update. Larger batches change the optimisation (fewer, averaged
 updates per epoch), not the model, data split, loss or checkpoint format.
 
 Validation streams `eval_batch_size` records at once with the same per-record,
-sample-weighted metrics as training.evaluate_records.
+sample-weighted metrics as training.evaluate_records, plus the per-record
+macro, median and max ESR. `selection` names the validation metric that picks
+best.json: pooled_esr (sample-weighted, the original rule) or macro_esr (mean of
+per-record ESR, which a few exploding records cannot hide behind).
 """
 from collections import deque
 import json
@@ -33,15 +36,23 @@ from .training import (load_config, resolve_device, validate_records, save_epoch
 
 
 BATCH_DEFAULTS = dict(batch_size=1, eval_batch_size=256, read_block_chunks=32)
+SELECTION_DEFAULTS = dict(selection='pooled_esr')
+SELECTIONS = ('pooled_esr', 'macro_esr')
 
 
 def load_batched_config(path):
-    config = load_config(path, extra_training=BATCH_DEFAULTS)
+    config = load_config(path, extra_training=BATCH_DEFAULTS | SELECTION_DEFAULTS)
     for name in BATCH_DEFAULTS:
         value = config['training'][name]
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f'{name} must be a positive integer')
+    if config['training']['selection'] not in SELECTIONS:
+        raise ValueError(f'selection must be one of {SELECTIONS}')
     return config
+
+
+def selection_score(validation, selection):
+    return validation['esr'] if selection == 'pooled_esr' else validation[selection]
 
 
 class _Lane:
@@ -302,8 +313,11 @@ def evaluate_batched(model, records, *, chunk_samples, warmup_samples, lanes,
         per_record[record.id] = dict(samples=n, mse=float(square[i]/n), mae=float(absolute[i]/n),
                                      esr=float(square[i]/max(energy[i], n*1e-8)))
     total = int(counts.sum())
+    esr = np.array([r['esr'] for r in per_record.values()])
     return dict(samples=total, mse=float(square.sum()/total), mae=float(absolute.sum()/total),
-                esr=float(square.sum()/max(energy.sum(), total*1e-8)), records=per_record)
+                esr=float(square.sum()/max(energy.sum(), total*1e-8)),
+                macro_esr=float(esr.mean()), median_esr=float(np.median(esr)), max_esr=float(esr.max()),
+                records=per_record)
 
 
 def _accelerate(model, device):
@@ -333,7 +347,8 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
     restored = None
     if resume is not None:
         resume = Path(resume).resolve()
-        restored = load_resume(output, resume, config, signature)
+        restored = load_resume(output, resume, config, signature,
+                               training_defaults=BATCH_DEFAULTS | SELECTION_DEFAULTS)
         start_epoch, best = restored['epoch'], restored['best_esr']
         model = AudioModel.from_checkpoint(resume/'model.mdlus').to(device)
     else:
@@ -417,15 +432,18 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
                                       warmup_samples=options['warmup_samples'],
                                       lanes=options['eval_batch_size'],
                                       block_chunks=options['read_block_chunks'], device=device)
-        improved = validation['esr'] < best
-        best = min(best, validation['esr'])
+        score = selection_score(validation, options['selection'])
+        improved = score < best
+        best = min(best, score)  # stored as best_esr: the best value of the selection metric
         report = dict(epoch=epoch, updates=updates, scored_chunks=scored_chunks, batch_size=lanes,
                       skipped_updates=len(skipped), skipped=skipped,
                       train={k: v/samples for k, v in sums.items()},
-                      validation=validation, best_validation_esr=best, seconds=time.monotonic()-begun)
+                      validation=validation, selection=options['selection'], best_validation_esr=best,
+                      seconds=time.monotonic()-begun)
         checkpoint = save_epoch(output, model, optimizer, epoch=epoch, config=config,
                                 signature=signature, best_esr=best, report=report)
-        pointer = dict(epoch=epoch, checkpoint=str(checkpoint.relative_to(output)), validation_esr=validation['esr'])
+        pointer = dict(epoch=epoch, checkpoint=str(checkpoint.relative_to(output)), validation_esr=validation['esr'],
+                       selection=options['selection'], validation_score=score)
         _json_atomic(output/'latest.json', pointer)
         if improved:
             _json_atomic(output/'best.json', pointer)
@@ -433,7 +451,8 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
         with (output/'history.jsonl').open('a') as stream:
             stream.write(json.dumps(report, allow_nan=False)+'\n')
         print(json.dumps({k: v for k, v in report.items() if k not in ('validation', 'skipped')} |
-                         dict(validation_esr=validation['esr'])), flush=True)
+                         dict(validation_esr=validation['esr'], validation_macro_esr=validation['macro_esr'],
+                              validation_max_esr=validation['max_esr'])), flush=True)
     return report
 
 
