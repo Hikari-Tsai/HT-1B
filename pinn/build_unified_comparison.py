@@ -98,6 +98,85 @@ def read(path):
     return json.loads(path.read_text(encoding='utf-8'))
 
 
+FULL_TEST = ROOT/'runs/full-test-20261103/report.json'
+FULL_TEST_EXTRA = ROOT/'runs/full-test-s6-bounded-20261104/report.json'
+BOUNDED_RUN = ROOT/'runs/s6-bounded-macro-20261103-1045'
+# name, training note, selection status. 'clean': chosen on validation only, with a
+# rule fixed before training; 'post_hoc': chosen after test scores were seen.
+FULL_TEST_MODELS = {
+    's6_bounded': ('S6＋TFiLM 有界 gain', '批次 TBPTT · 第 22／50 輪 · 驗證逐檔 macro ESR 選模', 'clean'),
+    's6_v3_e40': ('S6＋TFiLM v3 · 第 40 輪', '批次 TBPTT · 看過測試結果後改選', 'post_hoc'),
+    'riccardovib': ('RiccardoVib', '固定權重 · 未重新訓練', 'reference'),
+    's4_v3': ('S4＋TFiLM v3', '批次 TBPTT · 第 39／50 輪 · 驗證 pooled ESR 選模', 'clean'),
+    's6': ('S6＋TFiLM', '代表視窗 · 16 輪最佳', 'clean'),
+    'gru': ('GRU＋PINN', '完整訓練區間 · 學得電路參數', 'clean'),
+    'mlp': ('MLP＋PINN', '完整訓練區間 · 學得電路參數', 'clean'),
+    's6_pinn': ('S6＋TFiLM＋PINN', '代表視窗 · 16 輪最佳', 'clean'),
+    's6_v3': ('S6＋TFiLM v3 · 第 38 輪', '批次 TBPTT · 驗證 pooled ESR 選模（原定）', 'clean'),
+    's4': ('S4＋TFiLM', '代表視窗 · 16 輪最佳', 'clean'),
+    'baseline': ('純演算法', '原始電路參數 · 未擬合', 'baseline'),
+}
+
+
+def full_test(common, manifest):
+    """Complete test-interval scores, published only when every source checks out."""
+    if not FULL_TEST.exists() or not FULL_TEST_EXTRA.exists():
+        return None
+    main, extra = read(FULL_TEST), read(FULL_TEST_EXTRA)
+    files = manifest['records']
+    for report in (main, extra):
+        if (report['split'] != 'test' or report['manifest_signature'] != common['manifest_signature'] or
+            report['files'] != len(files) or report['samples_scored'] != main['samples_scored'] or
+            report['warmup_samples'] != main['warmup_samples'] or
+            report['metric_protocol'] != main['metric_protocol']):
+            raise ValueError('Full-test reports differ in split, files or protocol')
+    records = {**main['records'], **extra['records']}
+    sources = {**main['sources'], **extra['sources']}
+    if set(records) != set(FULL_TEST_MODELS):
+        raise ValueError('Full-test models differ from the published list')
+    for key in (*MODEL_KEYS, 'baseline'):
+        if sources[key]['sha256'] != common['sources'][key]['sha256']:
+            raise ValueError(f'Full-test checkpoint differs from the common comparison: {key}')
+    for key, source in sources.items():
+        path = ROOT/source['path']
+        if path.exists() and sha(path) != source['sha256']:
+            raise ValueError(f'Full-test source changed after scoring: {key}')
+    best, config = read(BOUNDED_RUN/'best.json'), read(BOUNDED_RUN/'config.json')
+    if (config['training']['selection'] != 'macro_esr' or config['model']['output_gain'] != 'bounded' or
+        sources['s6_bounded']['path'] != str((BOUNDED_RUN/best['checkpoint']/'model.mdlus').relative_to(ROOT)).replace('\\', '/')):
+        raise ValueError('Bounded S6 source is not the validation-selected checkpoint')
+    names = {r['id'] for r in files}
+    rows = []
+    for key, (name, note, status) in FULL_TEST_MODELS.items():
+        if set(records[key]) != names:
+            raise ValueError(f'Incomplete full-test records: {key}')
+        esr = np.array([r['esr'] for r in records[key].values()])
+        summary = (main if key in main['summary'] else extra)['summary'][key]
+        if not np.isclose(summary['macro_mean']['esr'], esr.mean(), rtol=1e-9):
+            raise ValueError(f'Full-test summary mismatch: {key}')
+        rows.append(dict(key=key, name=name, note=note, status=status,
+                         macro_esr=summary['macro_mean']['esr'], median_esr=summary['median_esr'],
+                         pooled_esr=summary['pooled_esr'], mrstft=summary['macro_mean']['mrstft'],
+                         rms_db_mae=summary['macro_mean']['rms_db_mae'],
+                         audible_macro_esr=summary['audible']['macro_esr'], max_esr=float(esr.max()),
+                         files_esr_above_1=int((esr > 1).sum()), files_esr_above_10=int((esr > 10).sum()),
+                         source=sources[key]['path'], sha256=sources[key]['sha256']))
+    rows.sort(key=lambda r: (r['status'] == 'baseline', r['macro_esr']))
+    return dict(files=main['files'], samples_scored=main['samples_scored'], hours=main['samples_scored']/48000/3600,
+                warmup_samples=main['warmup_samples'], audible_threshold_dbfs=main['audible_threshold_dbfs'],
+                mrstft_fft_sizes=main['metric_protocol']['mrstft']['fft_sizes'],
+                gpus=sorted({main['gpu'], extra['gpu']}), completed_utc=[main['completed_utc'], extra['completed_utc']],
+                bounded_selection=dict(epoch=best['epoch'], epochs=config['training']['epochs'],
+                                       validation_macro_esr=best['validation_score'],
+                                       validation_pooled_esr=best['validation_esr']),
+                rows=rows)
+
+
+def sha(path):
+    import hashlib
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
 def build_report(output, common, *, audio_base: str = '../runs/pretrained-comparison/audio',
                  instrument_audio_base: str = '../site/audio/instrument-excerpts', write_metrics: bool = True):
     if common is None or set(common['sources']) != {*MODEL_KEYS,'baseline'}:
@@ -193,6 +272,11 @@ def build_report(output, common, *, audio_base: str = '../runs/pretrained-compar
         cleanup=dict(removed_sections=['blind listening and partial full-corpus rankings',
             'standalone S4/S6 comparison','standalone S6/PINN summary','duplicate metric definitions'],
             scope='Presentation cleanup only. No new inference, training or test scores. Source artifacts retained.'))
+    tested = full_test(common, manifest)
+    if tested:
+        report['full_test'] = tested
+        for key in availability:
+            availability[key]['new_independent_test'] = True
     long_path=ROOT/'runs/long-clip-evaluation-20260929/comparison.json'
     if long_path.exists():
         long=read(long_path)

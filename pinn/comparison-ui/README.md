@@ -20,7 +20,8 @@ node pinn/comparison-ui/check_logic.cjs
 - 逐檔資料採 20 筆分頁。訓練區塊可切換 MLP、GRU、S4、S6、S6＋PINN；MLP／GRU 顯示單批 loss 對步數，其他三模型顯示 16 輪驗證 ESR。
 - MLP 的紀錄來自 `training/history.jsonl`（每 50 步），GRU 由 stdout 狀態快照還原（約每分鐘）；兩者只完成一輪，採用最終參數，沒有逐輪最佳 checkpoint。紀錄可分頁與完整匯出 CSV，不補造缺少的步數或 loss。
 - 方法表區分共同短視窗驗證與歷史完整區段測試。未執行的測試明確標示，不補造分數。
-- 六模型目前沒有新的獨立測試；共同評分位置不代表相同訓練預算。
+- 第 02 節「完整測試集」列出所有模型在測試切分全部 620 檔、2.97 小時的完整區段分數，資料來自 `runs/full-test-20261103/report.json` 與 `runs/full-test-s6-bounded-20261104/report.json`（由 `pinn/evaluate_full_test.py`、`pinn/evaluate_full_test_checkpoint.py` 產生）。產生器核對切分簽章、評分樣本數、逐檔數量、checkpoint SHA-256 與共同比較一致，以及有界 gain S6 確為依驗證 macro ESR 選出的輪次。看過測試結果才改選的 S6 v3 第 40 輪標為「事後選定」，不列名次。
+- 共同評分位置不代表相同訓練預算。
 - 不含舊的局部模型音軌、盲測、重複排名；不改動既有瀏覽器盲測儲存資料。
 - 無外部 JS、CSS、CDN 或伺服器需求。電路說明連結需要同目錄的 Markdown 與 SVG。
 

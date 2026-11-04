@@ -37,7 +37,20 @@ for(const [key,h] of Object.entries(data.histories)){
  assert.ok(Math.abs(h.rows.find(r=>r.epoch===h.selected_epoch).esr-source.macro_mean[key].esr)<2e-4*source.macro_mean[key].esr);
 }
 assert.deepEqual(Object.keys(data.availability).filter(k=>data.availability[k].historical_full_test).sort(),['gru','mlp','riccardovib']);
-assert.ok(Object.values(data.availability).every(v=>v.common_validation&&!v.new_independent_test));
+assert.ok(Object.values(data.availability).every(v=>v.common_validation&&v.new_independent_test===Boolean(data.full_test)));
+if(data.full_test){
+ const t=data.full_test,full=JSON.parse(fs.readFileSync(path.join(root,'runs/full-test-20261103/report.json'),'utf8')),extra=JSON.parse(fs.readFileSync(path.join(root,'runs/full-test-s6-bounded-20261104/report.json'),'utf8'));
+ assert.equal(t.files,620);assert.equal(t.samples_scored,full.samples_scored);assert.equal(t.rows.length,11);
+ for(const r of t.rows){
+  const report=full.summary[r.key]?full:extra,esr=Object.values(report.records[r.key]).map(x=>x.esr);
+  assert.equal(esr.length,620);close(r.macro_esr,esr.reduce((a,b)=>a+b,0)/620);close(r.macro_esr,report.summary[r.key].macro_mean.esr);
+  assert.equal(r.files_esr_above_1,esr.filter(x=>x>1).length);assert.equal(r.max_esr,Math.max(...esr));assert.equal(r.sha256,report.sources[r.key].sha256);
+  if(source.sources[r.key])assert.equal(r.sha256,source.sources[r.key].sha256);
+ }
+ const order=t.rows.filter(r=>r.status!=='baseline').map(r=>r.macro_esr);assert.deepEqual(order,[...order].sort((a,b)=>a-b));
+ assert.equal(t.rows.at(-1).key,'baseline');assert.equal(t.rows[0].key,'s6_bounded');assert.equal(t.rows[0].status,'clean');
+ assert.equal(t.rows.find(r=>r.key==='s6_v3_e40').status,'post_hoc');assert.equal(t.bounded_selection.epoch,22);
+}
 assert.equal(data.coverage.mlp,5100828000);assert.equal(data.coverage.gru,5100828000);
 const csv=C.recordCSV(filtered,source.window_signature);
 assert.equal(csv.split('\r\n').length,filtered.length*5+1);assert.ok(csv.includes('"s6_pinn"'));assert.ok(csv.includes(source.window_signature));
@@ -130,13 +143,21 @@ get('history-model').value='s6_pinn';get('history-model').listeners.change();ass
 for(const m of C.METHODS)assert.ok(get('comparison-table').innerHTML.includes(m.name));
 assert.ok(!get('comparison-table').innerHTML.includes('第 null'));
 get('theme').listeners.click();assert.equal(context.document.documentElement.dataset.theme,'dark');get('theme').listeners.click();assert.equal(context.document.documentElement.dataset.theme,'light');
-for(const id of ['export-summary','export-records','export-json'])get(id).listeners.click();
+if(data.full_test){
+ assert.equal(get('full-test').hidden,false);
+ for(const r of data.full_test.rows)assert.ok(get('full-test-table').innerHTML.includes(r.name));
+ assert.ok(get('full-test-table').innerHTML.includes('事後選定'));assert.ok(get('full-test-insight').textContent.startsWith('S6＋TFiLM 有界 gain 最低'));
+ assert.ok(get('full-test-spike').textContent.includes('104 檔 ESR＞1'));assert.ok(get('coverage-table').innerHTML.includes('已完成 · 620 檔'));
+ assert.ok(!get('full-test-table').innerHTML.includes('NaN'));
+}
+for(const id of ['export-summary','export-records','export-json',...(data.full_test?['export-full-test']:[])])get(id).listeners.click();
 (async()=>{
- assert.equal(downloads.length,5);
+ assert.equal(downloads.length,data.full_test?6:5);
  assert.equal((await downloads[0].blob.text()).split('\r\n').length,data.histories.mlp.rows.length+1);
  assert.equal((await downloads[1].blob.text()).split('\r\n').length,data.histories.gru.rows.length+1);
  assert.equal((await downloads[2].blob.text()).split('\r\n').length,8);
  assert.equal((await downloads[3].blob.text()).split('\r\n').length,3101);assert.equal(JSON.stringify(JSON.parse(await downloads[4].blob.text())),JSON.stringify(data));
+ if(data.full_test)assert.equal((await downloads[5].blob.text()).split('\r\n').length,data.full_test.rows.length+1);
  console.log('PASS: 7 methods x 5 metrics x 2 aggregations; source parity; filters, pagination, histories, theme, CSV/JSON, unique sections and local links.');
  console.log('Node data/state checks only; no browser rendering claim.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

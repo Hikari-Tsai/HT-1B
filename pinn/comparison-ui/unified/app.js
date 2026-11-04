@@ -15,7 +15,7 @@
     study=selector.value==='short'?data.five_models:{...data.long_form.studies[selector.value],protocol:data.long_form.protocol,sources:data.long_form.sources,window_signature:data.long_form.window_signature,manifest_signature:data.long_form.manifest_signature,gpu:data.long_form.protocol.gpu,cuda:data.long_form.protocol.cuda};
     const c=study.candidate;
     $('evaluation-note').textContent=c?`${scopes[c.category]}。共同時間軸 ${c.start}–${c.stop} 秒，每檔 ${c.seconds.toFixed(1)} 秒，共 ${study.files} 檔。${c.content} ${c.id==='G'?'缺少 125 檔 Release＝0；勿與 620 檔群體直接比較。':''}${c.id==='F'?'掃頻和 A 重複，獨立列示以免重複加權。':''}${c.id==='H'?'靜音專項僅 2 秒，檢查底噪與殘留輸出，不當作一般有聲排名。':''}未進行增益擬合或重新選模。`:'歷史共同短視窗驗證：每檔 2 個視窗，4,096 樣本暖機＋1,024 樣本計分。';
-    $('scope-copy').textContent=data.long_form?'新長片段已用全部六模型與純演算法重新推論。這些資料曾參與先前研究，C／D／E 更與訓練區間重疊；不是新的獨立測試。各片段分開比較，保留歷史短視窗作為另一份評估。':'這批驗證資料曾用於選模；目前沒有涵蓋六模型的新獨立測試。顯示既有共同短視窗評估。';
+    $('scope-copy').textContent=data.long_form?'新長片段已用全部六模型與純演算法重新推論。這些資料曾參與先前研究，C／D／E 更與訓練區間重疊；不是新的獨立測試。各片段分開比較，保留歷史短視窗作為另一份評估。'+(data.full_test?'所有模型的完整測試集分數見第 02 節。':''):'這批驗證資料曾用於選模，顯示既有共同短視窗評估。'+(data.full_test?'所有模型的完整測試集分數見第 02 節。':'目前沒有涵蓋六模型的新獨立測試。');
     $('fact-files').textContent=String(study.files);
     $('fact-windows').textContent=String(study.windows);
     $('fact-length').textContent=c?`${c.seconds.toFixed(1)} 秒`:'21.33 ms';
@@ -115,13 +115,32 @@
     const training=key=>data.coverage[key]?`${(data.coverage[key]/1e9).toFixed(3)} 十億樣本 · 完整訓練區間`:
       data.histories[key]?'16 輪 × 8,680 區段代表視窗':key==='baseline'?'未訓練；原始參數':'使用既有權重；原始素材重疊未知';
     const inference=key=>key==='baseline'?'電路數值求解':key==='mlp'||key==='gru'?'學得參數後，電路數值求解':key==='s6_pinn'?'神經網路預測物理狀態':'神經網路推論';
-    $('coverage-table').innerHTML=`<table class="coverage-table"><caption class="sr-only">訓練量、推論方式與評估覆蓋</caption><thead><tr><th scope="col">方法</th><th scope="col">本次訓練來源 / 規模</th><th scope="col">推論方式</th><th scope="col">共同短視窗驗證</th><th scope="col">歷史完整區段測試</th></tr></thead><tbody>${C.METHODS.map(m=>`<tr><th scope="row">${m.name}${m.key==='baseline'?' · 基準':''}</th><td>${training(m.key)}</td><td>${inference(m.key)}</td><td>已完成</td><td>${data.availability[m.key].historical_full_test?'已完成（歷史）':'未執行'}</td></tr>`).join('')}</tbody></table>`;
+    $('coverage-table').innerHTML=`<table class="coverage-table"><caption class="sr-only">訓練量、推論方式與評估覆蓋</caption><thead><tr><th scope="col">方法</th><th scope="col">本次訓練來源 / 規模</th><th scope="col">推論方式</th><th scope="col">共同短視窗驗證</th><th scope="col">歷史完整區段測試</th>${data.full_test?'<th scope="col">本次完整測試集</th>':''}</tr></thead><tbody>${C.METHODS.map(m=>`<tr><th scope="row">${m.name}${m.key==='baseline'?' · 基準':''}</th><td>${training(m.key)}</td><td>${inference(m.key)}</td><td>已完成</td><td>${data.availability[m.key].historical_full_test?'已完成（歷史）':'未執行'}</td>${data.full_test?`<td>${data.availability[m.key].new_independent_test?`已完成 · ${data.full_test.files} 檔`:'未執行'}</td>`:''}</tr>`).join('')}</tbody></table>`;
     $('provenance').innerHTML=`<p>共同資料：<code>runs/s6-tfilm-pinn-gpu-20260929/common-validation/comparison.json</code></p><p>視窗簽章：<code>${esc(study.window_signature)}</code></p><p>切分簽章：<code>${esc(study.manifest_signature)}</code></p><p>訓練：${data.split_hours.train.toFixed(3)} 小時；驗證：${data.split_hours.validation.toFixed(3)} 小時；歷史保留測試：${data.split_hours.test.toFixed(3)} 小時。此處為全部區段時數，總表僅計分共同短視窗。</p><p>評估環境：${esc(study.gpu)} / CUDA ${esc(study.cuda)}；純演算法使用 CPU 求解。</p>${C.METHODS.map(m=>`<p>${m.name}：<code>${esc(study.sources[m.key].path)}</code><br>SHA-256：<code>${esc(study.sources[m.key].sha256)}</code></p>`).join('')}`;
     $('built-at').textContent=`頁面整理：${new Date(data.built_utc).toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})} 台北時間 · 離線快照`;
     if(data.long_form){
       $('coverage-table').innerHTML=$('coverage-table').innerHTML.replace('<th scope="col">歷史完整區段測試</th>','<th scope="col">本次 A–H 長片段／專項</th>').replace(/<td>(?:已完成（歷史）|未執行)<\/td>/g,'<td>七方法皆完成；G 為 495 檔</td>');
       $('provenance').innerHTML=`<p>目前評估：${esc(scope())}；長片段來源 <code>runs/long-clip-evaluation-20260929/comparison.json</code>。長片段從錄音起點連續帶入 Dry，RiccardoVib 依其原生 16 樣本歷史；無重新訓練。</p><p>長片段完成時間：${esc(data.long_form.completed_utc)}；長片段簽章：<code>${esc(data.long_form.window_signature)}</code></p>`+$('provenance').innerHTML.replace('共同資料：','歷史短視窗來源：').replace('視窗簽章：','目前選擇的視窗簽章：').replace('此處為全部區段時數，總表僅計分共同短視窗。','此處為原始切分區段時數，總表依上方片段選單計分。');
     }
+  }
+  const fullColumns=[['macro_esr','逐檔平均 ESR'],['median_esr','ESR 中位數'],['pooled_esr','合併 ESR'],['mrstft','MR-STFT'],['rms_db_mae','RMS 包絡 · dB'],['files_esr_above_1','ESR＞1 檔數']];
+  const fullColor=key=>(C.METHODS.find(m=>m.key===key)||{color:{s6_bounded:'#1d6f45',s6_v3_e40:'#5b8fa8',s6_v3:'#8aa9b8',s4_v3:'#c47e7e'}[key]}).color;
+  function renderFullTest(){
+    const t=data.full_test;
+    if(!t)return;
+    $('full-test').hidden=false;
+    const fmtCell=(k,v)=>k==='files_esr_above_1'?String(v):C.fmt(v,k==='rms_db_mae'?'esr':k);
+    const ranked=t.rows.filter(r=>r.status!=='baseline'),scale=Math.max(...ranked.filter(r=>r.macro_esr<=1).map(r=>r.macro_esr));
+    const best=Object.fromEntries(fullColumns.map(([k])=>[k,Math.min(...ranked.filter(r=>r.status!=='post_hoc').map(r=>r[k]))]));
+    const tag={post_hoc:'<span class="badge">事後選定</span>',reference:'<span class="badge">既有權重</span>',baseline:'<span class="badge">基準</span>'};
+    let rank=0;
+    const row=r=>{const shown=r.status==='baseline'||r.status==='post_hoc'?'—':++rank;return `<tr><th scope="row"><span class="method-name"><span class="rank">${shown}</span><i class="dot" style="--method:${fullColor(r.key)}" aria-hidden="true"></i>${esc(r.name)}${tag[r.status]||''}</span><small>${esc(r.note)}</small></th>${fullColumns.map(([k])=>`<td class="${k==='macro_esr'?'metric-selected ':''}${r.status!=='baseline'&&r.status!=='post_hoc'&&r[k]===best[k]?'best':''}"><span class="value">${fmtCell(k,r[k])}</span>${k==='macro_esr'?(r.macro_esr<=1?`<i class="bar" aria-hidden="true" style="width:${r.macro_esr/scale*80}%;--method:${fullColor(r.key)}"></i>`:'<small>超出尺度</small>'):''}</td>`).join('')}</tr>`;};
+    $('full-test-table').innerHTML=`<table class="comparison-table"><caption class="sr-only">完整測試集各模型分數，依逐檔平均 ESR 排序</caption><thead><tr><th scope="col">模型 / 選模方式</th>${fullColumns.map(([k,n])=>`<th scope="col" class="${k==='macro_esr'?'metric-selected':''}">${n} ↓</th>`).join('')}</tr></thead><tbody>${ranked.map(row).join('')}</tbody><tfoot>${t.rows.filter(r=>r.status==='baseline').map(row).join('')}</tfoot></table>`;
+    $('full-test-scope').textContent=`測試切分的全部 ${t.files} 檔、${t.hours.toFixed(2)} 小時（${t.samples_scored.toLocaleString('zh-TW')} 個評分樣本），依逐檔平均 ESR 排序，全部越低越好。粗體為未事後選定的模型中最低值；名次不含事後選定列與基準。`;
+    const top=ranked.find(r=>r.status!=='post_hoc'),b=t.bounded_selection,old=t.rows.find(r=>r.key==='s6_v3');
+    $('full-test-insight').textContent=`${top.name} 最低：逐檔平均 ESR ${fmtCell('macro_esr',top.macro_esr)}，最差一檔 ${fmtCell('macro_esr',top.max_esr)}，沒有 ESR＞1 的檔案。它在第 ${b.epoch}／${b.epochs} 輪依驗證逐檔 macro ESR（${fmtCell('macro_esr',b.validation_macro_esr)}）選出，規則在訓練前就固定。`;
+    $('full-test-spike').textContent=old?`原本的 S6 v3 第 38 輪以驗證 pooled ESR 選出，中位數 ${fmtCell('median_esr',old.median_esr)} 很好，但 ${old.files_esr_above_1} 檔 ESR＞1、${old.files_esr_above_10} 檔＞10。原因是輸出增益沒有上限：近靜音時內部狀態悄悄放大，遇到突然起音就爆衝。pooled ESR 會掩蓋少數爆音檔，因此改用逐檔 macro ESR 選模，並把增益限制在 0–2（2·sigmoid）。`:'';
+    $('full-test-protocol').textContent=`每個測試區段從起點後至少 ${t.warmup_samples.toLocaleString('zh-TW')} 樣本（約 1.02 秒）的第一個 16 對齊樣本開始計分，到最後一個完整 16 樣本區塊。MR-STFT 使用 FFT ${t.mrstft_fft_sizes.map(n=>n.toLocaleString('zh-TW')).join('／')}，與歷史短視窗的頻譜分數不能直接比較。評估 GPU：${t.gpus.join('、')}。`;
   }
   // Audio stays in separate short licensed WAVs; only compact waveform envelopes live in the report.
   const audition=data.listening;
@@ -199,6 +218,7 @@
     const selected=rows(),summary=C.summarize(selected,$('aggregate').value,study.protocol.esr_floor);
     download(C.csv([['scope','window_signature','aggregation','files','filters','method',...metrics],...C.METHODS.map(m=>[scope(),study.window_signature,$('aggregate').value,selected.length,JSON.stringify(filters()),m.key,...metrics.map(k=>summary[m.key][k])])]),`cl1b-${selector.value}-summary.csv`,'text/csv;charset=utf-8');
   });
+  if(data.full_test)$('export-full-test').addEventListener('click',()=>download(C.csv([['scope','files','model','selection_status',...fullColumns.map(([k])=>k),'max_esr','files_esr_above_10','audible_macro_esr','source','sha256'],...data.full_test.rows.map(r=>['full_test',data.full_test.files,r.key,r.status,...fullColumns.map(([k])=>r[k]),r.max_esr,r.files_esr_above_10,r.audible_macro_esr,r.source,r.sha256])]),'cl1b-full-test-summary.csv','text/csv;charset=utf-8'));
   $('export-json').addEventListener('click',()=>download(JSON.stringify(data,null,2),'cl1b-comparison.json','application/json'));
   $('listen-record').addEventListener('change',()=>{listenRecord=Number($('listen-record').value);listenTrack='reference_wet';renderListening();setListeningSource(false);});
   $('listen-track').addEventListener('change',()=>{listenTrack=$('listen-track').value;renderListening();setListeningSource(true);});
@@ -222,5 +242,5 @@
     if(target&&target.tagName==='DETAILS')target.open=true;
   }
   window.addEventListener('hashchange',revealAnchor);
-  render();renderHistory();renderCoverage();renderListening();setListeningSource(false);revealAnchor();
+  render();renderFullTest();renderHistory();renderCoverage();renderListening();setListeningSource(false);revealAnchor();
 })();
