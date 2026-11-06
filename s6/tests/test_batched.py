@@ -318,3 +318,84 @@ def test_macro_selection_picks_lowest_per_record_mean(tmp_path):
         doc['training']['selection'] = 'max_esr'
         cfg.write_text(json.dumps(doc))
         train_batched(m, cfg, tmp_path/'other')
+
+
+def pinn_config(tmp_path, name='pinn.json', **training):
+    dest = write_config(tmp_path, 's6_tfilm_pinn', name, batch_size=2, eval_batch_size=2)
+    doc = json.loads(dest.read_text())
+    doc['training'].update(training)
+    dest.write_text(json.dumps(doc))
+    return dest
+
+
+def small_pinn():
+    from s6.pinn_model import S6PINN
+    return S6PINN(architecture='s6_tfilm', **MODEL)
+
+
+def test_pinn_stream_carries_physical_state_across_chunks():
+    torch.manual_seed(4)
+    model = small_pinn().double().eval()
+    with torch.no_grad():
+        model.output.weight.normal_(std=.5)  # move e/f/s away from their constant init
+    x = torch.randn(2, 48, dtype=torch.float64)*.3
+    controls = torch.tensor([[.5, .5, 0., 1.], [.2, .7, .6, .3]], dtype=torch.float64)
+    pots = torch.tensor([[.4, .5, .25, .5, 0.], [.7, .2, .5, .25, 3.]], dtype=torch.float64)
+    with torch.no_grad():
+        whole, residual, _ = model.stream(x, controls, pots)
+        a, ra, state = model.stream(x[:, :20], controls, pots)
+        b, rb, _ = model.stream(x[:, 20:], controls, pots, state)
+    torch.testing.assert_close(torch.cat((a, b), 1), whole)
+    for key in residual:
+        torch.testing.assert_close(torch.cat((ra[key], rb[key]), 1), residual[key])
+
+
+def test_pinn_batched_validation_matches_single_lane(tmp_path):
+    from s6.data import load_records
+    from s6.batched import evaluate_batched, record_pots
+    spans = [('validation', 0, 100), ('validation', 110, 150), ('validation', 160, 300)]
+    records = load_records(write_manifest(tmp_path, wav(tmp_path), spans), RATE)
+    torch.manual_seed(5)
+    model = small_pinn().eval()
+    pots = record_pots(records)
+    one = evaluate_batched(model, records, chunk_samples=16, warmup_samples=16, lanes=1, pots=pots)
+    many = evaluate_batched(model, records, chunk_samples=16, warmup_samples=16, lanes=3, block_chunks=2, pots=pots)
+    for key in ('esr', 'macro_esr'):
+        assert many[key] == pytest.approx(one[key], rel=1e-6)
+    assert set(many['physics_mse']) == {'c3_kcl', 'gre_fast', 'gre_slow'}
+    for key, value in one['physics_mse'].items():
+        assert many['physics_mse'][key] == pytest.approx(value, rel=1e-6)
+
+
+def test_record_pots_match_dataset_controls(tmp_path):
+    from dataclasses import astuple
+    from ht1b.config import Circuit
+    from ht1b.dataset import dataset_controls, parse_filename
+    from s6.data import load_records
+    from s6.batched import record_pots
+    path = wav(tmp_path)
+    records = load_records(write_manifest(tmp_path, path, SPANS), RATE)
+    expected, _ = dataset_controls(parse_filename(path), Circuit())
+    np.testing.assert_array_equal(record_pots(records)[0], astuple(expected)[:5])
+
+
+def test_pinn_batched_training_ramps_physics_and_resumes(tmp_path):
+    from s6.models import AudioModel
+    from s6.pinn_model import S6PINN
+    from s6.batched import train_batched
+    m = write_manifest(tmp_path, wav(tmp_path), SPANS)
+    cfg = pinn_config(tmp_path, epochs=2, physics_ramp_epochs=2, selection='macro_esr')
+    first = train_batched(m, cfg, tmp_path/'run')
+    history = [json.loads(line) for line in (tmp_path/'run/history.jsonl').read_text().splitlines()]
+    assert [h['physics_weight'] for h in history] == [0., .5]
+    assert set(first['validation']['physics_mse']) == {'c3_kcl', 'gre_fast', 'gre_slow'}
+    assert np.isfinite(first['train']['physics']) and np.isfinite(first['validation']['macro_esr'])
+    model = AudioModel.from_checkpoint(tmp_path/'run/checkpoints/epoch-000002/model.mdlus')
+    assert isinstance(model, S6PINN)
+    saved = torch.load(tmp_path/'run/checkpoints/epoch-000002/training.pt', weights_only=True)
+    assert [g['lr'] for g in saved['optimizer']['param_groups']] == [.001, 1e-4]
+    doc = json.loads(cfg.read_text())
+    doc['training']['epochs'] = 3
+    cfg.write_text(json.dumps(doc))
+    third = train_batched(m, cfg, tmp_path/'run', resume=tmp_path/'run/checkpoints/epoch-000002')
+    assert third['epoch'] == 3 and third['physics_weight'] == 1.

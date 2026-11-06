@@ -63,6 +63,19 @@ class S6PINN(AudioModel):
             params, c, TorchOps)
         return wet, residual, recurrent, states[:, -1]
 
+    def stream(self, dry, controls, pots, state=None):
+        """One chunk of chronological streaming; state['physical'] carries e/f/s.
+
+        A missing or zeroed physical state is the circuit at rest, as used for
+        zero state at each record start in batched TBPTT.
+        """
+        state = {} if state is None else state
+        previous = state.get('physical')
+        if previous is None:
+            previous = dry.new_zeros(dry.shape[0], 3, dtype=torch.float64)
+        wet, residual, recurrent, last = self(dry, controls, pots, state, previous)
+        return wet.to(dry.dtype), residual, dict(recurrent, physical=last)
+
     def predict_window(self, dry, controls, pots, warmup=4096, chunk=1024):
         if warmup < 1 or dry.shape[1] <= warmup:
             raise ValueError('A nonempty Dry-only warmup and scored tail are required')

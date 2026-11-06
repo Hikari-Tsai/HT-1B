@@ -13,6 +13,12 @@ sample-weighted metrics as training.evaluate_records, plus the per-record
 macro, median and max ESR. `selection` names the validation metric that picks
 best.json: pooled_esr (sample-weighted, the original rule) or macro_esr (mean of
 per-record ESR, which a few exploding records cannot hide behind).
+
+architecture s6_tfilm_pinn streams S6PINN: e/f/s carried across chunks with the
+network state, zero (circuit at rest) at each record start, circuit pots from
+each record's filename labels. Loss adds physics_weight x mean ODE residual^2
+(linearly ramped from 0 over physics_ramp_epochs) and prior_weight x the
+physical-parameter prior; physical parameters use physical_learning_rate.
 """
 from collections import deque
 import json
@@ -38,17 +44,82 @@ from .training import (load_config, resolve_device, validate_records, save_epoch
 BATCH_DEFAULTS = dict(batch_size=1, eval_batch_size=256, read_block_chunks=32)
 SELECTION_DEFAULTS = dict(selection='pooled_esr')
 SELECTIONS = ('pooled_esr', 'macro_esr')
+PINN_DEFAULTS = dict(physics_weight=1., physics_ramp_epochs=0, physical_learning_rate=1e-4, prior_weight=1e-4)
+TRAINING_DEFAULTS = BATCH_DEFAULTS | SELECTION_DEFAULTS | PINN_DEFAULTS
 
 
 def load_batched_config(path):
-    config = load_config(path, extra_training=BATCH_DEFAULTS | SELECTION_DEFAULTS)
+    config = load_config(path, extra_training=TRAINING_DEFAULTS)
     for name in BATCH_DEFAULTS:
         value = config['training'][name]
         if isinstance(value, bool) or not isinstance(value, int) or value < 1:
             raise ValueError(f'{name} must be a positive integer')
     if config['training']['selection'] not in SELECTIONS:
         raise ValueError(f'selection must be one of {SELECTIONS}')
+    t = config['training']
+    for name in ('physics_weight', 'physical_learning_rate', 'prior_weight'):
+        if isinstance(t[name], bool) or not isinstance(t[name], (int, float)) or not math.isfinite(t[name]) or t[name] < 0:
+            raise ValueError(f'{name} must be finite and nonnegative')
+    if isinstance(t['physics_ramp_epochs'], bool) or not isinstance(t['physics_ramp_epochs'], int) or t['physics_ramp_epochs'] < 0:
+        raise ValueError('physics_ramp_epochs must be a nonnegative integer')
     return config
+
+
+def is_pinn(config):
+    return config['model']['architecture'] == 's6_tfilm_pinn'
+
+
+def build_model(config):
+    if is_pinn(config):
+        from .pinn_model import S6PINN
+        return S6PINN(**{**config['model'], 'architecture': 's6_tfilm'})
+    return AudioModel(**config['model'])
+
+
+def record_pots(records):
+    """[records, 5] float64 circuit pots (threshold, ratio, attack, release, makeup_db).
+
+    Derived from filename labels exactly as the full-corpus manifest; never the
+    normalized network controls.
+    """
+    from ht1b.config import Circuit
+    from ht1b.dataset import dataset_controls, parse_filename
+    rows = []
+    for record in records:
+        controls, _ = dataset_controls(parse_filename(record.path), Circuit())
+        if controls.mode != 'manual':
+            raise ValueError('The circuit head requires manual controls')
+        rows.append([controls.threshold, controls.ratio, controls.attack, controls.release, controls.makeup_db])
+    return np.asarray(rows, dtype=np.float64)
+
+
+def physics_weight(options, epoch):
+    ramp = options['physics_ramp_epochs']
+    return options['physics_weight']*(min(1., (epoch-1)/ramp) if ramp else 1.)
+
+
+def _step(model, x, controls, gain, state, pots):
+    """Returns (prediction, residual or None, next state)."""
+    if pots is None:
+        prediction, state = model(x, controls, state, gain)
+        return prediction, None, state
+    return model.stream(x, controls, pots, state)
+
+
+def _lane_pots(table, batch, device):
+    if table is None:
+        return None
+    return torch.from_numpy(table[np.maximum(batch['index'], 0)]).to(device)
+
+
+def physics_loss(residual, rows, valid, chunk):
+    """Mean over residual terms of the squared residual on scored, valid samples."""
+    device = next(iter(residual.values())).device
+    index = torch.tensor(rows, device=device)
+    lengths = torch.as_tensor(valid[rows], device=device)
+    mask = (torch.arange(chunk, device=device)[None] < lengths[:, None]).double()
+    terms = [(v[index].square()*mask).sum()/mask.sum() for v in residual.values()]
+    return torch.stack(terms).mean()
 
 
 def selection_score(validation, selection):
@@ -271,7 +342,7 @@ def scored_loss(criterion, prediction, target, rows, valid, chunk):
 
 @torch.no_grad()
 def evaluate_batched(model, records, *, chunk_samples, warmup_samples, lanes,
-                     block_chunks=32, device='cpu'):
+                     block_chunks=32, device='cpu', pots=None):
     """Same metrics as training.evaluate_records, streaming `lanes` records at once."""
     if not records:
         raise ValueError('No recordings match selected split')
@@ -284,17 +355,22 @@ def evaluate_batched(model, records, *, chunk_samples, warmup_samples, lanes,
     positions = torch.arange(chunk_samples, device=device)
     state = None
     lanes = min(lanes, len(records))
+    physics, physics_count = {}, 0
     for batch in prefetch(lane_batches(records, range(len(records)), lanes,
                                        chunk_samples, block_chunks)):
         x, target, controls, gain, keep = _to_device(batch, model, device)
         state = mask_state(state, keep)
-        prediction, state = model(x, controls, state, gain)
+        prediction, residual, state = _step(model, x, controls, gain, state, _lane_pots(pots, batch, device))
         valid = torch.from_numpy(batch['valid']).to(device)
         offset = torch.from_numpy(batch['offset']).to(device)
         mask = (positions[None] < valid[:, None]) & (positions[None]+offset[:, None] >= warmup_samples)
         if not torch.isfinite(prediction[mask]).all():
             raise ValueError('Nonfinite model output during validation')
         weight = mask.double()
+        if residual is not None:
+            for key, value in residual.items():
+                physics[key] = physics.get(key, 0.)+float((value.square()*weight).sum())
+            physics_count += int(weight.sum())
         error = (prediction-target).double()*weight
         rows = torch.stack((error.square().sum(1), error.abs().sum(1),
                             (target.double().square()*weight).sum(1), weight.sum(1))).cpu().numpy()
@@ -317,6 +393,7 @@ def evaluate_batched(model, records, *, chunk_samples, warmup_samples, lanes,
     return dict(samples=total, mse=float(square.sum()/total), mae=float(absolute.sum()/total),
                 esr=float(square.sum()/max(energy.sum(), total*1e-8)),
                 macro_esr=float(esr.mean()), median_esr=float(np.median(esr)), max_esr=float(esr.max()),
+                **(dict(physics_mse={k: v/physics_count for k, v in physics.items()}) if physics else {}),
                 records=per_record)
 
 
@@ -347,17 +424,21 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
     restored = None
     if resume is not None:
         resume = Path(resume).resolve()
-        restored = load_resume(output, resume, config, signature,
-                               training_defaults=BATCH_DEFAULTS | SELECTION_DEFAULTS)
+        restored = load_resume(output, resume, config, signature, training_defaults=TRAINING_DEFAULTS)
         start_epoch, best = restored['epoch'], restored['best_esr']
         model = AudioModel.from_checkpoint(resume/'model.mdlus').to(device)
     else:
-        model = AudioModel(**config['model']).to(device)
+        model = build_model(config).to(device)
     if options['epochs'] <= start_epoch:
         raise ValueError('epochs must exceed the last completed epoch')
     _accelerate(model, device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=options['learning_rate'],
-                                  weight_decay=options['weight_decay'])
+    if is_pinn(config):
+        physical = {id(p) for p in model.physical.parameters()}
+        groups = [dict(params=[p for p in model.parameters() if id(p) not in physical]),
+                  dict(params=list(model.physical.parameters()), lr=options['physical_learning_rate'])]
+    else:
+        groups = model.parameters()
+    optimizer = torch.optim.AdamW(groups, lr=options['learning_rate'], weight_decay=options['weight_decay'])
     if restored is not None:
         optimizer.load_state_dict(restored['optimizer'])
         for key, value in optimizer.state.items():
@@ -372,6 +453,8 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
     _json_atomic(output/'manifest.json', json.loads(Path(manifest).read_text()))
     train_records = [r for r in records if r.split == 'train']
     validation_records = [r for r in records if r.split == 'validation']
+    train_pots = record_pots(train_records) if is_pinn(config) else None
+    validation_pots = record_pots(validation_records) if is_pinn(config) else None
     report = None
     for epoch in range(start_epoch+1, options['epochs']+1):
         begun = time.monotonic()
@@ -379,23 +462,31 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
         order = list(range(len(train_records)))
         random.Random(options['seed']+epoch).shuffle(order)  # same permutation as train()
         sums = dict(loss=0., l1=0., esr=0., spectral=0.)
+        if train_pots is not None:
+            sums.update(physics=0., prior=0.)
+        weight = physics_weight(options, epoch)
         samples = updates = scored_chunks = streak = 0
         skipped = []
         state = None
         for batch in prefetch(lane_batches(train_records, order, lanes, chunk,
                                            options['read_block_chunks'])):
             x, target, controls, gain, keep = _to_device(batch, model, device)
+            pots = _lane_pots(train_pots, batch, device)
             state = mask_state(state, keep)
             rows = [i for i in range(lanes) if batch['index'][i] >= 0 and
                     batch['offset'][i] >= options['warmup_samples']]
             if not rows:  # every live lane is still warming up its record
                 with torch.no_grad():
-                    _, state = model(x, controls, state, gain)
+                    _, _, state = _step(model, x, controls, gain, state, pots)
                 continue
             optimizer.zero_grad(set_to_none=True)
-            prediction, state = model(x, controls, state, gain)
+            prediction, residual, state = _step(model, x, controls, gain, state, pots)
             loss, step_sums, step_samples = scored_loss(criterion, prediction, target, rows,
                                                         batch['valid'], chunk)
+            if residual is not None:
+                physics, prior = physics_loss(residual, rows, batch['valid'], chunk), model.prior_loss()
+                loss = loss + weight*physics + options['prior_weight']*prior
+                step_sums.update(physics=physics.item()*step_samples, prior=prior.item()*step_samples)
             norm = None
             if torch.isfinite(loss):
                 loss.backward()
@@ -431,12 +522,14 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
         validation = evaluate_batched(model, validation_records, chunk_samples=chunk,
                                       warmup_samples=options['warmup_samples'],
                                       lanes=options['eval_batch_size'],
-                                      block_chunks=options['read_block_chunks'], device=device)
+                                      block_chunks=options['read_block_chunks'], device=device,
+                                      pots=validation_pots)
         score = selection_score(validation, options['selection'])
         improved = score < best
         best = min(best, score)  # stored as best_esr: the best value of the selection metric
         report = dict(epoch=epoch, updates=updates, scored_chunks=scored_chunks, batch_size=lanes,
                       skipped_updates=len(skipped), skipped=skipped,
+                      **(dict(physics_weight=weight) if train_pots is not None else {}),
                       train={k: v/samples for k, v in sums.items()},
                       validation=validation, selection=options['selection'], best_validation_esr=best,
                       seconds=time.monotonic()-begun)
@@ -466,4 +559,5 @@ def evaluate_checkpoint_batched(manifest, checkpoint, *, split='validation', dev
     model = _accelerate(AudioModel.from_checkpoint(checkpoint/'model.mdlus').to(device), device)
     return evaluate_batched(model, records, chunk_samples=options['chunk_samples'],
                             warmup_samples=options['warmup_samples'], lanes=lanes,
-                            block_chunks=options.get('read_block_chunks', 32), device=device)
+                            block_chunks=options.get('read_block_chunks', 32), device=device,
+                            pots=record_pots(records) if is_pinn(metadata['config']) else None)
