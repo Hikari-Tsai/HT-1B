@@ -4,6 +4,11 @@ Same samples, history and metrics as evaluate_full_test.py (zero state at each
 interval start, fused scan, scoring from the first 16-aligned sample >= 49152
 after the start), for checkpoints trained after that report was fixed. Each
 model is given as name=checkpoint-directory; its model.mdlus is scored.
+
+S6PINN checkpoints stream with S6PINN.stream: e/f/s start at rest at the
+interval start and are carried across chunks, exactly as batched training; the
+circuit uses the manifest's physical pots. Their ODE residual mean squares over
+the scored samples are reported as physics_mse.
 """
 from __future__ import annotations
 import argparse
@@ -19,7 +24,25 @@ from ht1b.audio_metrics import METRIC_PROTOCOL
 from s6.data import encode_labels
 from s6.fused_scan import accelerate_training
 from s6.models import AudioModel
+from s6.pinn_experiment import pots_for
+from s6.pinn_model import S6PINN
 from s6.representative_experiment import write_json, utc
+
+
+@torch.no_grad()
+def stream_pinn(model, dry, controls, pots, spans):
+    """Returns predictions [B,T] and per-term residual square sums over scored samples."""
+    state, output, sums = None, [], {}
+    first = torch.tensor([f-s for s, f, _ in spans], device=dry.device)
+    stop = torch.tensor([e-s for s, _, e in spans], device=dry.device)
+    for offset in range(0, dry.shape[1], CHUNK):
+        y, residual, state = model.stream(dry[:, offset:offset+CHUNK], controls, pots, state)
+        position = offset+torch.arange(y.shape[1], device=dry.device)
+        scored = ((position[None] >= first[:, None]) & (position[None] < stop[:, None])).double()
+        for key, value in residual.items():
+            sums[key] = sums.get(key, 0.)+(value.square()*scored).sum(1)
+        output.append(y.float().cpu())
+    return torch.cat(output, 1).numpy(), {k: v.cpu().numpy() for k, v in sums.items()}
 
 
 def run(output, models, limit=None, batch=32):
@@ -42,8 +65,11 @@ def run(output, models, limit=None, batch=32):
         path = directory/"model.mdlus"
         loaded[key] = accelerate_training(AudioModel.from_checkpoint(path).cuda().eval())
         sources[key] = dict(path=str(path.resolve().relative_to(ROOT)), sha256=sha(path),
-                            output_gain=loaded[key].output_gain)
+                            output_gain=loaded[key].output_gain,
+                            head='reduced_circuit' if isinstance(loaded[key], S6PINN) else 'gain')
     records = {key: {} for key in models}
+    physics = {key: {} for key, model in loaded.items() if isinstance(model, S6PINN)}
+    originals = {r["id"]: r for r in manifest["records"]}
     for offset in range(0, len(rows), batch):
         selected = rows[offset:offset+batch]
         spans, dry, wet = read_intervals(selected)
@@ -52,7 +78,12 @@ def run(output, models, limit=None, batch=32):
         gain = torch.tensor([g for _, g in labels], dtype=torch.float32, device="cuda")
         x = torch.from_numpy(dry).cuda()
         for key, model in loaded.items():
-            values = stream(model, x, controls, gain)
+            if isinstance(model, S6PINN):
+                values, sums = stream_pinn(model, x, controls, pots_for(selected, originals, "cuda"), spans)
+                for key2, total in sums.items():
+                    physics[key][key2] = physics[key].get(key2, 0.)+float(total.sum())
+            else:
+                values = stream(model, x, controls, gain)
             for i, (row, (start, first, stop)) in enumerate(zip(selected, spans)):
                 a, b = first-start, stop-start
                 records[key][row["id"]] = interval_metrics(values[i, a:b], wet[i, a:b])
@@ -64,6 +95,9 @@ def run(output, models, limit=None, batch=32):
                   metric_protocol=METRIC_PROTOCOL, sources=sources,
                   history="zero state at interval start; Dry-only warmup of at least 49152 samples; fused scan",
                   summary={key: summarize(records[key]) for key in models}, records=records)
+    scored = report["samples_scored"]
+    for key, sums in physics.items():
+        report["summary"][key]["physics_mse"] = {k: v/scored for k, v in sums.items()}
     write_json(output/"report.json", report)
     status(phase="complete", macro_esr={k: v["macro_mean"]["esr"] for k, v in report["summary"].items()})
     return report
