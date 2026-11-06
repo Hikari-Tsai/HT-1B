@@ -39,10 +39,10 @@ for(const [key,h] of Object.entries(data.histories)){
 assert.deepEqual(Object.keys(data.availability).filter(k=>data.availability[k].historical_full_test).sort(),['gru','mlp','riccardovib']);
 assert.ok(Object.values(data.availability).every(v=>v.common_validation&&v.new_independent_test===Boolean(data.full_test)));
 if(data.full_test){
- const t=data.full_test,full=JSON.parse(fs.readFileSync(path.join(root,'runs/full-test-20261103/report.json'),'utf8')),extra=JSON.parse(fs.readFileSync(path.join(root,'runs/full-test-s6-bounded-20261104/report.json'),'utf8'));
- assert.equal(t.files,620);assert.equal(t.samples_scored,full.samples_scored);assert.equal(t.rows.length,11);
+ const t=data.full_test,reports=['full-test-20261103','full-test-s6-bounded-20261104','full-test-s6-pinn-20261106'].map(d=>JSON.parse(fs.readFileSync(path.join(root,'runs',d,'report.json'),'utf8'))),full=reports[0];
+ assert.equal(t.files,620);assert.equal(t.samples_scored,full.samples_scored);assert.equal(t.rows.length,13);
  for(const r of t.rows){
-  const report=full.summary[r.key]?full:extra,esr=Object.values(report.records[r.key]).map(x=>x.esr);
+  const report=reports.find(x=>x.summary[r.key]),esr=Object.values(report.records[r.key]).map(x=>x.esr);
   assert.equal(esr.length,620);close(r.macro_esr,esr.reduce((a,b)=>a+b,0)/620);close(r.macro_esr,report.summary[r.key].macro_mean.esr);
   assert.equal(r.files_esr_above_1,esr.filter(x=>x>1).length);assert.equal(r.max_esr,Math.max(...esr));assert.equal(r.sha256,report.sources[r.key].sha256);
   if(source.sources[r.key])assert.equal(r.sha256,source.sources[r.key].sha256);
@@ -50,6 +50,14 @@ if(data.full_test){
  const order=t.rows.filter(r=>r.status!=='baseline').map(r=>r.macro_esr);assert.deepEqual(order,[...order].sort((a,b)=>a-b));
  assert.equal(t.rows.at(-1).key,'baseline');assert.equal(t.rows[0].key,'s6_bounded');assert.equal(t.rows[0].status,'clean');
  assert.equal(t.rows.find(r=>r.key==='s6_v3_e40').status,'post_hoc');assert.equal(t.bounded_selection.epoch,22);
+ const pinn=reports[2],failing=Object.entries(full.records.s6_pinn).filter(([,v])=>v.esr>1).map(([k])=>k);
+ assert.equal(t.pinn.failing_files,failing.length);assert.equal(t.pinn.state_files,failing.length);
+ for(const key of ['s6_pinn_fixed','s6_pinn_ramp']){
+  const esr=failing.map(k=>pinn.records[key][k].esr).sort((a,b)=>a-b),mid=esr.length/2;
+  close(t.pinn.failing_median[key],esr.length%2?esr[Math.floor(mid)]:(esr[mid-1]+esr[mid])/2);
+  assert.deepEqual(t.pinn.runs[key].physics_mse,pinn.summary[key].physics_mse);assert.equal(t.rows.find(r=>r.key===key).status,'clean');
+ }
+ assert.equal(t.pinn.runs.s6_pinn_fixed.epoch,37);assert.equal(t.pinn.runs.s6_pinn_ramp.epoch,20);assert.equal(t.pinn.runs.s6_pinn_ramp.ramp_epochs,10);
 }
 assert.equal(data.coverage.mlp,5100828000);assert.equal(data.coverage.gru,5100828000);
 const csv=C.recordCSV(filtered,source.window_signature);
@@ -149,6 +157,9 @@ if(data.full_test){
  assert.ok(get('full-test-table').innerHTML.includes('事後選定'));assert.ok(get('full-test-insight').textContent.startsWith('S6＋TFiLM 有界 gain 最低'));
  assert.ok(get('full-test-spike').textContent.includes('104 檔 ESR＞1'));assert.ok(get('coverage-table').innerHTML.includes('已完成 · 620 檔'));
  assert.ok(!get('full-test-table').innerHTML.includes('NaN'));
+ assert.equal(get('full-test-pinn').hidden,false);assert.ok(!get('pinn-study-table').innerHTML.includes('NaN'));
+ for(const label of ['原版 · 短視窗 16 輪','A · 物理權重固定 1','參考：真實電路'])assert.ok(get('pinn-study-table').innerHTML.includes(label));
+ assert.ok(get('pinn-study-insight').textContent.startsWith('兩組都大幅改善'));assert.ok(get('pinn-study-caveat').textContent.includes('軟約束'));
 }
 for(const id of ['export-summary','export-records','export-json',...(data.full_test?['export-full-test']:[])])get(id).listeners.click();
 (async()=>{

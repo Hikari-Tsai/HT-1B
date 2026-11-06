@@ -124,7 +124,7 @@
     }
   }
   const fullColumns=[['macro_esr','逐檔平均 ESR'],['median_esr','ESR 中位數'],['pooled_esr','合併 ESR'],['mrstft','MR-STFT'],['rms_db_mae','RMS 包絡 · dB'],['files_esr_above_1','ESR＞1 檔數']];
-  const fullColor=key=>(C.METHODS.find(m=>m.key===key)||{color:{s6_bounded:'#1d6f45',s6_v3_e40:'#5b8fa8',s6_v3:'#8aa9b8',s4_v3:'#c47e7e'}[key]}).color;
+  const fullColor=key=>(C.METHODS.find(m=>m.key===key)||{color:{s6_bounded:'#1d6f45',s6_v3_e40:'#5b8fa8',s6_v3:'#8aa9b8',s4_v3:'#c47e7e',s6_pinn_fixed:'#b0779f',s6_pinn_ramp:'#6f3f63'}[key]}).color;
   function renderFullTest(){
     const t=data.full_test;
     if(!t)return;
@@ -140,7 +140,28 @@
     const top=ranked.find(r=>r.status!=='post_hoc'),b=t.bounded_selection,old=t.rows.find(r=>r.key==='s6_v3');
     $('full-test-insight').textContent=`${top.name} 最低：逐檔平均 ESR ${fmtCell('macro_esr',top.macro_esr)}，最差一檔 ${fmtCell('macro_esr',top.max_esr)}，沒有 ESR＞1 的檔案。它在第 ${b.epoch}／${b.epochs} 輪依驗證逐檔 macro ESR（${fmtCell('macro_esr',b.validation_macro_esr)}）選出，規則在訓練前就固定。`;
     $('full-test-spike').textContent=old?`原本的 S6 v3 第 38 輪以驗證 pooled ESR 選出，中位數 ${fmtCell('median_esr',old.median_esr)} 很好，但 ${old.files_esr_above_1} 檔 ESR＞1、${old.files_esr_above_10} 檔＞10。原因是輸出增益沒有上限：近靜音時內部狀態悄悄放大，遇到突然起音就爆衝。pooled ESR 會掩蓋少數爆音檔，因此改用逐檔 macro ESR 選模，並把增益限制在 0–2（2·sigmoid）。`:'';
+    renderPinnStudy(t);
     $('full-test-protocol').textContent=`每個測試區段從起點後至少 ${t.warmup_samples.toLocaleString('zh-TW')} 樣本（約 1.02 秒）的第一個 16 對齊樣本開始計分，到最後一個完整 16 樣本區塊。MR-STFT 使用 FFT ${t.mrstft_fft_sizes.map(n=>n.toLocaleString('zh-TW')).join('／')}，與歷史短視窗的頻譜分數不能直接比較。評估 GPU：${t.gpus.join('、')}。`;
+  }
+  function renderPinnStudy(t){
+    const p=t.pinn;
+    if(!p)return;
+    $('full-test-pinn').hidden=false;
+    const row=key=>t.rows.find(r=>r.key===key),f=v=>C.fmt(v,'esr'),sci=v=>v.toExponential(1);
+    const ref=p.reference_states,run=p.runs;
+    const lines=[
+      ['s6_pinn','原版 · 短視窗 16 輪','第 8／16 輪',null,ref.s6_pinn],
+      ['s6_pinn_fixed','A · 物理權重固定 1',`第 ${run.s6_pinn_fixed.epoch}／${run.s6_pinn_fixed.epochs} 輪`,run.s6_pinn_fixed.physics_mse,run.s6_pinn_fixed.states],
+      ['s6_pinn_ramp',`B · 物理權重 ${run.s6_pinn_ramp.ramp_epochs} 輪內由 0 升到 1`,`第 ${run.s6_pinn_ramp.epoch}／${run.s6_pinn_ramp.epochs} 輪`,run.s6_pinn_ramp.physics_mse,run.s6_pinn_ramp.states]];
+    const cell=(v,best)=>`<td class="${best?'best':''}"><span class="value">${v}</span></td>`;
+    const body=lines.map(([key,label,epoch,phys,st])=>{const r=row(key);return `<tr><th scope="row"><span class="method-name"><i class="dot" style="--method:${fullColor(key)}" aria-hidden="true"></i>${esc(label)}</span><small>${epoch}</small></th>${cell(f(r.macro_esr),key!=='s6_pinn'&&r.macro_esr===Math.min(row('s6_pinn_fixed').macro_esr,row('s6_pinn_ramp').macro_esr))}${cell(f(r.median_esr))}${cell(String(r.files_esr_above_1))}${cell(f(p.failing_median[key]))}${cell(f(st.e_max_median))}${cell(f(st.f_max_median))}${cell(phys?`${sci(phys.c3_kcl)} / ${sci(phys.gre_fast)} / ${sci(phys.gre_slow)}`:'—')}</tr>`;}).join('');
+    const circuit=`<tr><th scope="row"><span class="method-name"><i class="dot" style="--method:${fullColor('baseline')}" aria-hidden="true"></i>參考：真實電路（原始參數）</span><small>數值求解，非神經網路</small></th>${cell(f(row('baseline').macro_esr))}${cell(f(row('baseline').median_esr))}${cell(String(row('baseline').files_esr_above_1))}${cell(f(p.failing_median.baseline))}${cell(f(ref.circuit.e_max_median))}${cell(f(ref.circuit.f_max_median))}${cell('—')}</tr>`;
+    $('pinn-study-table').innerHTML=`<table class="comparison-table"><caption class="sr-only">S6＋PINN 各版本的完整測試分數、原失敗檔表現與物理狀態幅度</caption><thead><tr><th scope="col">版本 / 選中輪次</th><th scope="col">逐檔平均 ESR ↓</th><th scope="col">ESR 中位數 ↓</th><th scope="col">ESR＞1 檔數 ↓</th><th scope="col">原 ${p.failing_files} 個失敗檔 · ESR 中位數 ↓</th><th scope="col">e 每檔最大值（中位數）</th><th scope="col">f 每檔最大值（中位數）</th><th scope="col">測試物理殘差 C3 / 快 / 慢 ↓</th></tr></thead><tbody>${body}</tbody><tfoot>${circuit}</tfoot></table>`;
+    $('pinn-study-intro').textContent=`原版 S6＋PINN 在完整測試集有 ${row('s6_pinn').files_esr_above_1} 檔 ESR＞1，集中在 Threshold 40 與快 Attack 的重壓縮設定。診斷發現網路為壓低物理 loss，把電路狀態幾乎固定在初始值，所以幾乎不壓縮。重新訓練改用與 S6 v3 相同的完整區段批次 TBPTT（50 輪、lr 3e-4、驗證逐檔 macro ESR 選模，規則訓練前固定），兩組只差物理 loss 權重的安排。狀態欄是原版 ${p.state_files} 個失敗檔中，每檔掃描計分區段取最大值後的中位數。`;
+    const a=row('s6_pinn_fixed'),b=row('s6_pinn_ramp'),best=row('s6_bounded'),models=t.rows.filter(r=>r.status!=='baseline');
+    const lowest=[['pooled_esr',`合併 ESR ${f(a.pooled_esr)}`],['rms_db_mae',`RMS 包絡 ${C.fmt(a.rms_db_mae,'esr')} dB`]].filter(([k])=>a[k]===Math.min(...models.map(r=>r[k]))).map(([,text])=>text);
+    $('pinn-study-insight').textContent=`兩組都大幅改善：逐檔平均 ESR 由 ${f(row('s6_pinn').macro_esr)} 降到 ${f(a.macro_esr)}（A）與 ${f(b.macro_esr)}（B），原失敗檔的中位數由 ${f(p.failing_median.s6_pinn)} 降到 ${f(p.failing_median.s6_pinn_fixed)}／${f(p.failing_median.s6_pinn_ramp)}，接近 S6 有界 gain（${f(best.macro_esr)}）。e 已接近真實電路的幅度，表示網路確實開始壓縮。${lowest.length?`A 的${lowest.join('與')}是全部模型最低，`:''}A 最差一檔 ESR ${f(a.max_esr)}，拉高了它的逐檔平均。`;
+    $('pinn-study-caveat').textContent=`仍待改善：f 的幅度只有真實電路的一部分；兩組驗證分數在各輪間大幅跳動，A 曾出現物理殘差暴增的輪次。物理 loss 仍是軟約束，只有一個 seed（7），電路參數在訓練中也明顯偏離初始值。`;
   }
   // Audio stays in separate short licensed WAVs; only compact waveform envelopes live in the report.
   const audition=data.listening;

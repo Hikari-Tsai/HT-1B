@@ -23,6 +23,7 @@
     <p id="full-test-scope" class="helper"></p>
     <div id="full-test-table" class="table-wrap" role="region" aria-label="完整測試集各模型分數" tabindex="0"></div>
     <div class="reading"><p id="full-test-insight"></p><p id="full-test-spike"></p></div>
+    <div id="full-test-pinn" class="pinn-study" hidden><h3>S6＋PINN：原版與完整區段重新訓練</h3><p id="pinn-study-intro" class="small muted"></p><div id="pinn-study-table" class="table-wrap" role="region" aria-label="S6＋PINN 原版與重新訓練的比較" tabindex="0"></div><div class="reading"><p id="pinn-study-insight"></p><p id="pinn-study-caveat"></p></div></div>
     <details class="method-detail"><summary>完整測試怎麼計分、怎麼讀 <span aria-hidden="true">＋</span></summary><div class="method-columns"><article><h3>完整區段，不是短視窗</h3><p id="full-test-protocol"></p><p>電路從錄音第 0 個樣本連續求解；S4、S6 與 S6＋PINN 在每個測試區段起點以零狀態開始，只帶入 Dry 暖機後計分；RiccardoVib 依其原生 16 樣本歷史。沒有增益擬合或延遲校正。</p></article><article><h3>選模是否用過測試集</h3><p>標示「事後選定」的列，是看過第 38 輪的測試結果後，改用驗證逐檔 macro ESR 重新挑出的第 40 輪，分數帶有輕微洩漏，只作對照。有界 gain 版在訓練前就把 macro ESR 寫進設定檔，測試集沒有參與任何選擇。</p><p>「ESR＞1」是誤差能量大於目標能量的檔數，代表該檔輸出不可用；單一爆音檔可讓逐檔平均或 pooled ESR 大幅上升，因此同時列出中位數。</p></article></div></details>
   </section>
 

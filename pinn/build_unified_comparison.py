@@ -99,19 +99,27 @@ def read(path):
 
 
 FULL_TEST = ROOT/'runs/full-test-20261103/report.json'
-FULL_TEST_EXTRA = ROOT/'runs/full-test-s6-bounded-20261104/report.json'
+FULL_TEST_EXTRA = (ROOT/'runs/full-test-s6-bounded-20261104/report.json',
+                   ROOT/'runs/full-test-s6-pinn-20261106/report.json')
 BOUNDED_RUN = ROOT/'runs/s6-bounded-macro-20261103-1045'
+PINN_RUNS = {'s6_pinn_fixed': ROOT/'runs/s6-pinn-fixed-20261104-1434',
+             's6_pinn_ramp': ROOT/'runs/s6-pinn-ramp-20261104-1442'}
+# e/f/s reach on the original S6+PINN's failing test files: new checkpoints,
+# the original model and the reduced circuit (original parameters), same files.
+PINN_STATES = ROOT/'runs/full-test-s6-pinn-20261106/state-check.json'
 # name, training note, selection status. 'clean': chosen on validation only, with a
 # rule fixed before training; 'post_hoc': chosen after test scores were seen.
 FULL_TEST_MODELS = {
     's6_bounded': ('S6＋TFiLM 有界 gain', '批次 TBPTT · 第 22／50 輪 · 驗證逐檔 macro ESR 選模', 'clean'),
+    's6_pinn_ramp': ('S6＋TFiLM＋PINN · 物理權重漸增', '批次 TBPTT · 第 20／50 輪 · 驗證 macro ESR 選模', 'clean'),
     's6_v3_e40': ('S6＋TFiLM v3 · 第 40 輪', '批次 TBPTT · 看過測試結果後改選', 'post_hoc'),
+    's6_pinn_fixed': ('S6＋TFiLM＋PINN · 物理權重固定', '批次 TBPTT · 第 37／50 輪 · 驗證 macro ESR 選模', 'clean'),
     'riccardovib': ('RiccardoVib', '固定權重 · 未重新訓練', 'reference'),
     's4_v3': ('S4＋TFiLM v3', '批次 TBPTT · 第 39／50 輪 · 驗證 pooled ESR 選模', 'clean'),
     's6': ('S6＋TFiLM', '代表視窗 · 16 輪最佳', 'clean'),
     'gru': ('GRU＋PINN', '完整訓練區間 · 學得電路參數', 'clean'),
     'mlp': ('MLP＋PINN', '完整訓練區間 · 學得電路參數', 'clean'),
-    's6_pinn': ('S6＋TFiLM＋PINN', '代表視窗 · 16 輪最佳', 'clean'),
+    's6_pinn': ('S6＋TFiLM＋PINN（原版）', '代表視窗 · 16 輪最佳', 'clean'),
     's6_v3': ('S6＋TFiLM v3 · 第 38 輪', '批次 TBPTT · 驗證 pooled ESR 選模（原定）', 'clean'),
     's4': ('S4＋TFiLM', '代表視窗 · 16 輪最佳', 'clean'),
     'baseline': ('純演算法', '原始電路參數 · 未擬合', 'baseline'),
@@ -120,18 +128,20 @@ FULL_TEST_MODELS = {
 
 def full_test(common, manifest):
     """Complete test-interval scores, published only when every source checks out."""
-    if not FULL_TEST.exists() or not FULL_TEST_EXTRA.exists():
+    if not FULL_TEST.exists() or not all(path.exists() for path in FULL_TEST_EXTRA):
         return None
-    main, extra = read(FULL_TEST), read(FULL_TEST_EXTRA)
+    main, extras = read(FULL_TEST), [read(path) for path in FULL_TEST_EXTRA]
+    reports = [main, *extras]
     files = manifest['records']
-    for report in (main, extra):
+    for report in reports:
         if (report['split'] != 'test' or report['manifest_signature'] != common['manifest_signature'] or
             report['files'] != len(files) or report['samples_scored'] != main['samples_scored'] or
             report['warmup_samples'] != main['warmup_samples'] or
             report['metric_protocol'] != main['metric_protocol']):
             raise ValueError('Full-test reports differ in split, files or protocol')
-    records = {**main['records'], **extra['records']}
-    sources = {**main['sources'], **extra['sources']}
+    records = {k: v for report in reports for k, v in report['records'].items()}
+    sources = {k: v for report in reports for k, v in report['sources'].items()}
+    summaries = {k: v for report in reports for k, v in report['summary'].items()}
     if set(records) != set(FULL_TEST_MODELS):
         raise ValueError('Full-test models differ from the published list')
     for key in (*MODEL_KEYS, 'baseline'):
@@ -151,7 +161,7 @@ def full_test(common, manifest):
         if set(records[key]) != names:
             raise ValueError(f'Incomplete full-test records: {key}')
         esr = np.array([r['esr'] for r in records[key].values()])
-        summary = (main if key in main['summary'] else extra)['summary'][key]
+        summary = summaries[key]
         if not np.isclose(summary['macro_mean']['esr'], esr.mean(), rtol=1e-9):
             raise ValueError(f'Full-test summary mismatch: {key}')
         rows.append(dict(key=key, name=name, note=note, status=status,
@@ -165,11 +175,37 @@ def full_test(common, manifest):
     return dict(files=main['files'], samples_scored=main['samples_scored'], hours=main['samples_scored']/48000/3600,
                 warmup_samples=main['warmup_samples'], audible_threshold_dbfs=main['audible_threshold_dbfs'],
                 mrstft_fft_sizes=main['metric_protocol']['mrstft']['fft_sizes'],
-                gpus=sorted({main['gpu'], extra['gpu']}), completed_utc=[main['completed_utc'], extra['completed_utc']],
+                gpus=sorted({r['gpu'] for r in reports}), completed_utc=[r['completed_utc'] for r in reports],
                 bounded_selection=dict(epoch=best['epoch'], epochs=config['training']['epochs'],
                                        validation_macro_esr=best['validation_score'],
                                        validation_pooled_esr=best['validation_esr']),
-                rows=rows)
+                rows=rows, pinn=pinn_study(records, summaries, sources))
+
+
+def pinn_study(records, summaries, sources):
+    """Original vs batched S6+PINN on the full test: scores, residuals, state reach."""
+    failing = sorted(k for k, v in records['s6_pinn'].items() if v['esr'] > 1)
+    states = read(PINN_STATES)
+    runs = {}
+    for key, run in PINN_RUNS.items():
+        best, config = read(run/'best.json'), read(run/'config.json')
+        path = str((run/best['checkpoint']/'model.mdlus').relative_to(ROOT)).replace('\\', '/')
+        if (config['model']['architecture'] != 's6_tfilm_pinn' or config['training']['selection'] != 'macro_esr' or
+            sources[key]['path'] != path or states['checkpoints'][key.removeprefix('s6_pinn_')] != path):
+            raise ValueError(f'S6+PINN source is not the validation-selected checkpoint: {key}')
+        runs[key] = dict(epoch=best['epoch'], epochs=config['training']['epochs'],
+                         ramp_epochs=config['training']['physics_ramp_epochs'],
+                         physics_weight=config['training']['physics_weight'],
+                         validation_macro_esr=best['validation_score'],
+                         physics_mse=summaries[key]['physics_mse'],
+                         states=states['states'][key.removeprefix('s6_pinn_')])
+    def failing_median(key):
+        return float(np.median([records[key][k]['esr'] for k in failing]))
+    if states['files'] != len(failing) or set(states['reference']) != {'circuit', 's6_pinn'}:
+        raise ValueError('State check does not cover the failing files with both references')
+    return dict(failing_files=len(failing), state_files=states['files'], reference_states=states['reference'],
+                failing_median={key: failing_median(key) for key in ('s6_pinn', *PINN_RUNS, 'baseline', 's6_bounded')},
+                runs=runs)
 
 
 def sha(path):
