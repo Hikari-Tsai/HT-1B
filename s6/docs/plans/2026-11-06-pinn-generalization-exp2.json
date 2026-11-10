@@ -1,0 +1,9 @@
+{
+  "design": "full_factorial",
+  "seed": 20261107,
+  "factors": {
+    "train_fraction": ["10pct", "25pct", "50pct"],
+    "arm": ["M-S6", "M-STRUCT", "M-PINN"]
+  },
+  "independent_repeats": 2
+}

@@ -1,0 +1,9 @@
+{
+  "design": "full_factorial",
+  "seed": 20261106,
+  "factors": {
+    "holdout": ["K1_interp", "K2_interp", "K3_interp", "T40_threshold_minus40", "A0_attack0"],
+    "arm": ["M-S6", "M-STRUCT", "M-PINN"]
+  },
+  "independent_repeats": 2
+}
