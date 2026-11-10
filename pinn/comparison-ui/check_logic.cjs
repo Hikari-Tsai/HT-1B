@@ -160,6 +160,23 @@ if(data.full_test){
  assert.equal(get('full-test-pinn').hidden,false);assert.ok(!get('pinn-study-table').innerHTML.includes('NaN'));
  for(const label of ['原版 · 短視窗 16 輪','A · 物理權重固定 1','參考：真實電路'])assert.ok(get('pinn-study-table').innerHTML.includes(label));
  assert.ok(get('pinn-study-insight').textContent.startsWith('兩組都大幅改善'));assert.ok(get('pinn-study-caveat').textContent.includes('軟約束'));
+ const g=data.full_test.generalization;
+ if(g){
+  // Held-out split recomputed from file names: threshold -40 dB is "t_40" in the TubeTech naming.
+  const t40=JSON.parse(fs.readFileSync(path.join(root,'runs/full-test-t40-s6-20261107/report.json'),'utf8')),heldout=k=>/_t_40_/.test(k);
+  for(const key of Object.keys(t40.records)){
+   const rec=Object.entries(t40.records[key]),held=rec.filter(([k])=>heldout(k)).map(([,v])=>v.esr),seen=rec.filter(([k])=>!heldout(k)).map(([,v])=>v.esr),row=g.tests.find(t=>t.key===key);
+   assert.equal(held.length,g.heldout_files);close(row.heldout_macro_esr,held.reduce((a,b)=>a+b)/held.length);close(row.seen_macro_esr,seen.reduce((a,b)=>a+b)/seen.length);
+  }
+  assert.equal(g.heldout_files,124);assert.equal(g.training_cells,496);assert.deepEqual(g.scored,['t40_s6_s7','t40_s6_s8']);
+  assert.deepEqual(g.runs.filter(r=>r.frozen_states).map(r=>r.key),['t40_struct_s8']);assert.equal(g.runs.find(r=>r.key==='t40_struct_s8').status,'replaced');
+  assert.equal(get('generalization').hidden,false);
+  for(const label of ['M-S6 · seed 7','M-PINN · seed 8','M-STRUCT · seed 9','參考：S6 有界 gain'])assert.ok(get('gen-tests').innerHTML.includes(label));
+  assert.ok(!get('gen-tests').innerHTML.includes('M-STRUCT · seed 8'));assert.ok(get('gen-runs').innerHTML.includes('每輪完全相同'));
+  assert.equal((get('gen-chart').innerHTML.match(/<polyline/g)||[]).length,6);
+  for(const id of ['gen-runs','gen-tests','gen-chart','gen-insight','gen-caveat'])assert.ok(!get(id).innerHTML.includes('NaN')&&!get(id).innerHTML.includes('undefined'));
+  assert.ok(get('gen-caveat').textContent.startsWith('還不能判斷'));
+ }
 }
 for(const id of ['export-summary','export-records','export-json',...(data.full_test?['export-full-test']:[])])get(id).listeners.click();
 (async()=>{

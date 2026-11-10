@@ -9,3 +9,5 @@
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 .pinn-study{margin-top:2.5rem;padding-top:1.5rem;border-top:1px solid var(--line)}
 .pinn-study h3{margin:0 0 .5rem}
+#generalization h3{margin:26px 0 12px}#generalization .scope{margin-bottom:6px}.gen-chart{margin-top:18px}.gen-key{display:inline-flex;align-items:center;gap:6px;margin-right:14px}.gen-key:before{content:"";width:16px;height:3px;border-radius:2px;background:var(--method)}#gen-runs tr.muted th,#gen-runs tr.muted td{color:var(--muted)}
+#gen-tests td.gen-pending{text-align:center;color:var(--muted);font-family:inherit}

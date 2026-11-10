@@ -163,6 +163,31 @@
     $('pinn-study-insight').textContent=`兩組都大幅改善：逐檔平均 ESR 由 ${f(row('s6_pinn').macro_esr)} 降到 ${f(a.macro_esr)}（A）與 ${f(b.macro_esr)}（B），原失敗檔的中位數由 ${f(p.failing_median.s6_pinn)} 降到 ${f(p.failing_median.s6_pinn_fixed)}／${f(p.failing_median.s6_pinn_ramp)}，接近 S6 有界 gain（${f(best.macro_esr)}）。e 已接近真實電路的幅度，表示網路確實開始壓縮。${lowest.length?`A 的${lowest.join('與')}是全部模型最低，`:''}A 最差一檔 ESR ${f(a.max_esr)}，拉高了它的逐檔平均。`;
     $('pinn-study-caveat').textContent=`仍待改善：f 的幅度只有真實電路的一部分；兩組驗證分數在各輪間大幅跳動，A 曾出現物理殘差暴增的輪次。物理 loss 仍是軟約束，只有一個 seed（7），電路參數在訓練中也明顯偏離初始值。`;
   }
+  const genColor={s6:'#1d6f45',struct:'#b07a2a',pinn:'#6f3f63'};
+  function renderGeneralization(){
+    const g=data.full_test?.generalization;
+    if(!g)return;
+    $('generalization').hidden=false;
+    const f=v=>C.fmt(v,'esr'),sci=v=>v.toExponential(1),arm=r=>g.arms[r.arm];
+    const test=key=>g.tests.find(t=>t.key===key),done=g.runs.filter(r=>r.status!=='pending');
+    const statusText={complete:'完成',replaced:'不採用',pending:'待訓練'};
+    $('gen-status').textContent=`${done.length}／${g.runs.length} 次訓練完成；完整測試已評分 ${g.scored.length} 個模型（M-S6 兩個 seed）。M-PINN 與 M-STRUCT 的測試、以及取代卡住 seed 的重跑，要等有閒置 GPU 才能進行。`;
+    $('gen-intro').textContent=`${g.description}：${g.heldout_cells} 個旋鈕組合從訓練與驗證中移除，只用其餘 ${g.training_cells} 個組合訓練。完整測試仍是全部 ${g.files} 檔，其中 ${g.heldout_files} 檔屬於留出組合。Threshold −40 dB 是壓縮最重的一層，也是原版 S6＋PINN 失敗最集中的地方。`;
+    const runRow=r=>{const pending=r.status==='pending',p=r.physics_mse;return `<tr class="${r.status==='replaced'?'muted':''}"><th scope="row"><span class="method-name"><i class="dot" style="--method:${genColor[r.arm]}" aria-hidden="true"></i>${esc(arm(r).code)} · seed ${r.seed}<span class="badge">${statusText[r.status]}</span></span><small>${esc(arm(r).name)}${r.note?` · ${esc(r.note)}`:''}</small></th><td>${pending?'—':`第 ${r.best_epoch}／${r.epochs} 輪`}</td><td>${pending?'—':f(r.validation_macro_esr)}</td><td>${pending?'—':f(r.validation_median_esr)}</td><td>${p?`${sci(p.c3_kcl)} / ${sci(p.gre_fast)} / ${sci(p.gre_slow)}`:'—'}</td><td>${r.frozen_states?'是 · 每輪完全相同':pending||r.arm==='s6'?'—':'否'}</td><td>${g.scored.includes(r.key)?'已評分':pending?'—':r.status==='replaced'?'不採用':'待評分'}</td></tr>`;};
+    $('gen-runs').innerHTML=`<table class="comparison-table"><caption class="sr-only">留出實驗各次訓練，依比較組與 seed</caption><thead><tr><th scope="col">比較組 / seed</th><th scope="col">選用輪次</th><th scope="col">驗證 macro ESR ↓</th><th scope="col">驗證 median ESR ↓</th><th scope="col">選用輪物理殘差 C3 / 快 / 慢</th><th scope="col">電路狀態卡住</th><th scope="col">完整測試</th></tr></thead><tbody>${g.runs.map(runRow).join('')}</tbody></table>`;
+    const curves=done.filter(r=>r.curve.length),lo=.03,hi=1.5,epochs=Math.max(...curves.map(r=>r.epochs));
+    const x=e=>60+(e-1)/(epochs-1)*850,y=v=>20+(Math.log(hi)-Math.log(Math.min(hi,Math.max(lo,v))))/(Math.log(hi)-Math.log(lo))*190;
+    $('gen-chart').innerHTML=`<svg viewBox="0 0 960 260" role="img" aria-label="各次訓練每輪的驗證 macro ESR，對數座標"><title>驗證 macro ESR（對數座標），越低越好</title>${[.05,.1,.2,.5,1].map(v=>`<line class="grid" x1="60" x2="910" y1="${y(v)}" y2="${y(v)}"/><text x="48" y="${y(v)+4}" text-anchor="end">${v}</text>`).join('')}${curves.map(r=>`<polyline fill="none" stroke="${genColor[r.arm]}" stroke-width="2" stroke-dasharray="${r.seed===7?'':'6 4'}" opacity="${r.status==='replaced'?.35:.9}" points="${r.curve.map(c=>`${x(c.epoch).toFixed(1)},${y(c.macro_esr).toFixed(1)}`).join(' ')}"><title>${esc(arm(r).code)} seed ${r.seed}</title></polyline><circle cx="${x(r.best_epoch)}" cy="${y(r.validation_macro_esr)}" r="5" fill="${genColor[r.arm]}" stroke="var(--paper)" stroke-width="2"><title>${esc(arm(r).code)} seed ${r.seed} · 選用第 ${r.best_epoch} 輪：${f(r.validation_macro_esr)}</title></circle>`).join('')}${[1,5,10,15,20,25,30].filter(e=>e<=epochs).map(e=>`<text x="${x(e)}" y="235" text-anchor="middle">${e}</text>`).join('')}<text x="910" y="14" text-anchor="end">驗證 macro ESR（對數）/ 輪次</text></svg>`;
+    $('gen-chart-note').innerHTML=`${Object.entries(g.arms).map(([k,a])=>`<span class="gen-key" style="--method:${genColor[k]}">${esc(a.code)}</span>`).join('')} 實線 seed 7、虛線 seed 8；圓點是依驗證選用的輪次。每輪分數大幅跳動，所以只看選用點，不看最後一輪。超過 ${hi} 的值畫在上緣。`;
+    const ref=test('s6_bounded'),testRows=[['s6_bounded','參考：S6 有界 gain','全部 620 個組合訓練（第 02 節）','s6'],...g.runs.filter(r=>r.status!=='replaced').map(r=>[r.key,`${arm(r).code} · seed ${r.seed}`,'留出 T40 訓練',r.arm])];
+    const testRow=([key,label,note,a])=>{const t=test(key);return `<tr><th scope="row"><span class="method-name"><i class="dot" style="--method:${genColor[a]}" aria-hidden="true"></i>${esc(label)}</span><small>${note}</small></th>${t?`<td class="metric-selected"><span class="value">${f(t.heldout_macro_esr)}</span></td><td>${f(t.heldout_median_esr)}</td><td>${t.heldout_files_esr_above_1}</td><td>${f(t.seen_macro_esr)}</td><td>${f(t.seen_median_esr)}</td><td>${f(t.macro_esr)}</td><td>${key==='s6_bounded'?'—':`×${Math.exp(t.heldout_median_log_ratio_vs_full).toFixed(2)}`}</td>`:'<td colspan="7" class="gen-pending">尚未評分</td>'}</tr>`;};
+    $('gen-tests').innerHTML=`<table class="comparison-table"><caption class="sr-only">完整測試 ESR，留出組合與已訓練組合分開</caption><thead><tr><th scope="col">模型</th><th scope="col" class="metric-selected">留出 ${g.heldout_files} 檔 · 逐檔平均 ESR ↓</th><th scope="col">留出 · 中位數 ↓</th><th scope="col">留出 · ESR＞1 檔數 ↓</th><th scope="col">已訓練 ${g.files-g.heldout_files} 檔 · 逐檔平均 ↓</th><th scope="col">已訓練 · 中位數 ↓</th><th scope="col">全部 ${g.files} 檔 · 逐檔平均 ↓</th><th scope="col">留出檔 ÷ 參考 · 中位數</th></tr></thead><tbody>${testRows.slice(1).map(testRow).join('')}</tbody><tfoot>${testRow(testRows[0])}</tfoot></table>`;
+    const s6=g.tests.filter(t=>t.key.startsWith('t40_s6_')),range=k=>`${f(Math.min(...s6.map(t=>t[k])))}–${f(Math.max(...s6.map(t=>t[k])))}`;
+    $('gen-insight').textContent=s6.length?`目前只能說 M-S6 這一邊：留出 −40 dB 之後，這 ${g.heldout_files} 檔的逐檔平均 ESR 是 ${range('heldout_macro_esr')}，用全部組合訓練的參考模型是 ${f(ref.heldout_macro_esr)}，約差 ${(Math.min(...s6.map(t=>t.heldout_macro_esr))/ref.heldout_macro_esr).toFixed(1)}–${(Math.max(...s6.map(t=>t.heldout_macro_esr))/ref.heldout_macro_esr).toFixed(1)} 倍。已訓練的組合幾乎不受影響（${range('seen_macro_esr')}，參考 ${f(ref.seen_macro_esr)}）。這一層本來就難：即使全部組合都訓練過，−40 dB 的誤差也是其他組合的 ${(ref.heldout_macro_esr/ref.seen_macro_esr).toFixed(1)} 倍。`:'尚無完整測試結果。';
+    const stuck=g.runs.find(r=>r.frozen_states);
+    $('gen-caveat').textContent=`還不能判斷 PINN 是否泛化得比較好：M-PINN 與 M-STRUCT 尚未做完整測試。驗證分數也不能拿來比，因為驗證集不含留出組合。${stuck?`M-STRUCT seed ${stuck.seed} 的電路狀態 ${stuck.epochs} 輪都沒動（物理權重 0 時 e 收不到梯度、f／s 梯度很小），模型等於沒有壓縮；它不列入比較，改以 seed 9 重跑，但「兩個 seed 有一個訓練不起來」本身也會寫進結論。`:''}`;
+    $('gen-rule').textContent=`主要指標是留出檔的逐檔 log(ESR_PINN) − log(ESR_S6)，取中位數後跨 seed 合併。停止規則：${g.stopping_rule}`;
+  }
   // Audio stays in separate short licensed WAVs; only compact waveform envelopes live in the report.
   const audition=data.listening;
   const listenAudio=$('listen-audio'), listenCanvas=$('listen-waveform'), listenCtx=listenCanvas.getContext('2d');
@@ -240,6 +265,12 @@
     download(C.csv([['scope','window_signature','aggregation','files','filters','method',...metrics],...C.METHODS.map(m=>[scope(),study.window_signature,$('aggregate').value,selected.length,JSON.stringify(filters()),m.key,...metrics.map(k=>summary[m.key][k])])]),`cl1b-${selector.value}-summary.csv`,'text/csv;charset=utf-8');
   });
   if(data.full_test)$('export-full-test').addEventListener('click',()=>download(C.csv([['scope','files','model','selection_status',...fullColumns.map(([k])=>k),'max_esr','files_esr_above_10','audible_macro_esr','source','sha256'],...data.full_test.rows.map(r=>['full_test',data.full_test.files,r.key,r.status,...fullColumns.map(([k])=>r[k]),r.max_esr,r.files_esr_above_10,r.audible_macro_esr,r.source,r.sha256])]),'cl1b-full-test-summary.csv','text/csv;charset=utf-8'));
+  if(data.full_test?.generalization)$('export-generalization').addEventListener('click',()=>{
+    const g=data.full_test.generalization,cols=['heldout_macro_esr','heldout_median_esr','heldout_files_esr_above_1','seen_macro_esr','seen_median_esr','macro_esr','heldout_median_log_ratio_vs_full'];
+    download(C.csv([['scheme','key','arm','seed','status','best_epoch','validation_macro_esr','frozen_states',...cols],
+      ...g.runs.map(r=>{const t=g.tests.find(x=>x.key===r.key);return [g.scheme,r.key,r.arm,r.seed,r.status,r.best_epoch??'',r.validation_macro_esr??'',r.frozen_states??'',...cols.map(k=>t?t[k]:'')];}),
+      ...g.tests.filter(t=>t.key==='s6_bounded').map(t=>[g.scheme,t.key,'reference','','full_data','','','',...cols.map(k=>t[k])])]),'cl1b-t40-holdout.csv','text/csv;charset=utf-8');
+  });
   $('export-json').addEventListener('click',()=>download(JSON.stringify(data,null,2),'cl1b-comparison.json','application/json'));
   $('listen-record').addEventListener('change',()=>{listenRecord=Number($('listen-record').value);listenTrack='reference_wet';renderListening();setListeningSource(false);});
   $('listen-track').addEventListener('change',()=>{listenTrack=$('listen-track').value;renderListening();setListeningSource(true);});
@@ -263,5 +294,5 @@
     if(target&&target.tagName==='DETAILS')target.open=true;
   }
   window.addEventListener('hashchange',revealAnchor);
-  render();renderFullTest();renderHistory();renderCoverage();renderListening();setListeningSource(false);revealAnchor();
+  render();renderFullTest();renderGeneralization();renderHistory();renderCoverage();renderListening();setListeningSource(false);revealAnchor();
 })();

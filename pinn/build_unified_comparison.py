@@ -179,7 +179,8 @@ def full_test(common, manifest):
                 bounded_selection=dict(epoch=best['epoch'], epochs=config['training']['epochs'],
                                        validation_macro_esr=best['validation_score'],
                                        validation_pooled_esr=best['validation_esr']),
-                rows=rows, pinn=pinn_study(records, summaries, sources))
+                rows=rows, pinn=pinn_study(records, summaries, sources),
+                generalization=generalization(main, records))
 
 
 def pinn_study(records, summaries, sources):
@@ -206,6 +207,92 @@ def pinn_study(records, summaries, sources):
     return dict(failing_files=len(failing), state_files=states['files'], reference_states=states['reference'],
                 failing_median={key: failing_median(key) for key in ('s6_pinn', *PINN_RUNS, 'baseline', 's6_bounded')},
                 runs=runs)
+
+
+# P1 of s6/docs/plans/2026-11-06-pinn-generalization-experiments.md: threshold
+# -40 dB cells held out of training and validation, every test interval scored.
+T40_RUNS = {('s6', 7): ROOT/'runs/t40-s6-s7-20261106-1436', ('s6', 8): ROOT/'runs/t40-s6-s8-20261106-1436',
+            ('struct', 7): ROOT/'runs/t40-struct-s7-20261106-1436', ('struct', 8): ROOT/'runs/t40-struct-s8-20261106-1436',
+            ('pinn', 7): ROOT/'runs/t40-pinn-s7-20261106-1436', ('pinn', 8): ROOT/'runs/t40-pinn-s8-20261106-1436'}
+# Replacement for the stuck STRUCT seed 8 (user decision 2026-11-10); not trained yet.
+T40_PENDING = (('struct', 9),)
+T40_REPLACED = {('struct', 8): '狀態卡住，以 seed 9 重跑取代'}
+T40_TESTS = (ROOT/'runs/full-test-t40-s6-20261107/report.json',)
+T40_INTERVALS = ROOT/'runs/v3/s6-v3-intervals.json'
+T40_ARMS = {'s6': ('M-S6', 'S6＋TFiLM 有界 gain'),
+            'struct': ('M-STRUCT', 'PINN 架構 · 物理權重 0'),
+            'pinn': ('M-PINN', 'PINN · 物理權重 10 輪內由 0 升到 1')}
+
+
+def generalization(main, full_records):
+    """Held-out knob-cell pilot (T40): training status and split test scores."""
+    if not T40_INTERVALS.exists() or not all(p.exists() for p in (*T40_RUNS.values(), *T40_TESTS)):
+        return None
+    from s6.holdout import SEED, cell, schemes
+    intervals = read(T40_INTERVALS)
+    cells = {r['id'].rsplit('-i', 1)[0]: cell(r['parameters']) for r in intervals['records'] if r['split'] == 'test'}
+    heldout = schemes(set(cells.values()), SEED)['T40'][0]
+    if len(cells) != main['files'] or len(heldout) != 124 or set(cells) != set(full_records['s6_bounded']):
+        raise ValueError('T40 cells do not match the full-test files')
+    runs, sources = [], {}
+    for (arm, seed), run in T40_RUNS.items():
+        config, best = read(run/'config.json'), read(run/'best.json')
+        history = [json.loads(line) for line in (run/'history.jsonl').read_text(encoding='utf-8').splitlines() if line.strip()]
+        t, m = config['training'], config['model']
+        expected = dict(s6=('s6_tfilm', None), struct=('s6_tfilm_pinn', (0., 0)), pinn=('s6_tfilm_pinn', (1., 10)))[arm]
+        if (m['architecture'] != expected[0] or t['seed'] != seed or t['selection'] != 'macro_esr' or
+            (expected[1] and (t['physics_weight'], t['physics_ramp_epochs']) != expected[1]) or
+            (arm == 's6' and m['output_gain'] != 'bounded') or
+            [h['epoch'] for h in history] != list(range(1, t['epochs']+1))):
+            raise ValueError(f'T40 run differs from the planned arm: {arm} seed {seed}')
+        scores = [h['validation']['macro_esr'] for h in history]
+        chosen = history[best['epoch']-1]
+        if best['epoch'] != int(np.argmin(scores))+1 or not np.isclose(best['validation_score'], min(scores), rtol=1e-12):
+            raise ValueError(f'T40 best checkpoint is not the validation minimum: {arm} seed {seed}')
+        physics = [h['validation'].get('physics_mse') for h in history]
+        # Identical up to float summation order: the e/f/s trajectories never moved.
+        frozen = arm == 'struct' and all(np.isclose(p[k], physics[0][k], rtol=1e-9) for p in physics for k in p)
+        key = f't40_{arm}_s{seed}'
+        sources[key] = str((run/best['checkpoint']/'model.mdlus').relative_to(ROOT)).replace('\\', '/')
+        runs.append(dict(key=key, arm=arm, seed=seed, status='replaced' if (arm, seed) in T40_REPLACED else 'complete',
+                         note=T40_REPLACED.get((arm, seed), ''), epochs=t['epochs'], best_epoch=best['epoch'],
+                         validation_macro_esr=best['validation_score'], validation_median_esr=chosen['validation']['median_esr'],
+                         physics_mse=chosen['validation'].get('physics_mse'), frozen_states=frozen,
+                         curve=[dict(epoch=h['epoch'], macro_esr=h['validation']['macro_esr'],
+                                     physics_weight=h.get('physics_weight')) for h in history]))
+    if [r['key'] for r in runs if r['frozen_states']] != ['t40_struct_s8']:
+        raise ValueError('Unexpected STRUCT state check result')
+    for arm, seed in T40_PENDING:
+        runs.append(dict(key=f't40_{arm}_s{seed}', arm=arm, seed=seed, status='pending', note='等待閒置 GPU',
+                         epochs=30, curve=[]))
+    reports = [read(p) for p in T40_TESTS]
+    records = {'s6_bounded': full_records['s6_bounded']}
+    for report in reports:
+        if (report['split'] != 'test' or report['manifest_signature'] != main['manifest_signature'] or
+            report['files'] != main['files'] or report['samples_scored'] != main['samples_scored'] or
+            report['warmup_samples'] != main['warmup_samples'] or report['metric_protocol'] != main['metric_protocol']):
+            raise ValueError('T40 test report differs in split, files or protocol')
+        for key, source in report['sources'].items():
+            if source['path'] != sources[key] or (ROOT/source['path']).exists() and sha(ROOT/source['path']) != source['sha256']:
+                raise ValueError(f'T40 test source is not the validation-selected checkpoint: {key}')
+        records.update(report['records'])
+    tests = []
+    for key, rec in records.items():
+        if set(rec) != set(cells):
+            raise ValueError(f'Incomplete T40 test records: {key}')
+        part = lambda inside: np.array([rec[f]['esr'] for f in cells if (cells[f] in heldout) == inside])
+        held, seen = part(True), part(False)
+        ratio = [np.log(rec[f]['esr'])-np.log(records['s6_bounded'][f]['esr']) for f in cells if cells[f] in heldout]
+        tests.append(dict(key=key, heldout_macro_esr=float(held.mean()), heldout_median_esr=float(np.median(held)),
+                          seen_macro_esr=float(seen.mean()), seen_median_esr=float(np.median(seen)),
+                          macro_esr=float(np.mean([r['esr'] for r in rec.values()])),
+                          heldout_files_esr_above_1=int((held > 1).sum()),
+                          heldout_median_log_ratio_vs_full=float(np.median(ratio))))
+    return dict(scheme='T40', description='Threshold −40 dB 整層', heldout_cells=len(heldout),
+                training_cells=len(set(cells.values()))-len(heldout), heldout_files=int(sum(c in heldout for c in cells.values())),
+                files=len(cells), arms={k: dict(code=c, name=n) for k, (c, n) in T40_ARMS.items()},
+                runs=runs, tests=tests, scored=sorted(k for k in records if k != 's6_bounded'),
+                stopping_rule='兩個 seed 的 M-PINN 在 T40 留出檔上都比 M-S6 差（log ESR 差中位數 > 0）時先停下檢討，不進 P2。')
 
 
 def sha(path):

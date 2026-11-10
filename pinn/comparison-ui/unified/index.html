@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>HT-1B｜六模型共同驗證</title><style>/*__STYLE__*/</style></head>
 <body>
 <a class="skip" href="#five-models">跳至模型比較</a>
-<header class="topbar"><a class="brand" href="#top">HT—1B <small>MODEL EVALUATION</small></a><nav aria-label="頁面導覽"><a href="#five-models">模型比較</a><a href="#full-test">完整測試集</a><a href="#listening">試聽與圖表</a><a href="#records">逐檔資料</a><a href="#protocol">方法與範圍</a></nav><button id="theme" class="quiet">深色模式</button></header>
+<header class="topbar"><a class="brand" href="#top">HT—1B <small>MODEL EVALUATION</small></a><nav aria-label="頁面導覽"><a href="#five-models">模型比較</a><a href="#full-test">完整測試集</a><a href="#generalization">泛化實驗</a><a href="#listening">試聽與圖表</a><a href="#records">逐檔資料</a><a href="#protocol">方法與範圍</a></nav><button id="theme" class="quiet">深色模式</button></header>
 <main id="top">
   <section class="intro"><div><p class="eyebrow">SAME AUDIO · SAME SCORING PROTOCOL</p><h1>六個模型，<br>一份共同比較。</h1><p class="lede">MLP、GRU、S4、S6、S6＋PINN 與 RiccardoVib。<br>以相同位置的實測 Wet 為目標，另列純演算法基準。</p></div><dl class="facts"><div><dt>目前評估錄音</dt><dd><span id="fact-files">—</span> <small>檔</small></dd></div><div><dt>共同評分位置</dt><dd><span id="fact-windows">—</span> <small>段</small></dd></div><div><dt>每段計分長度</dt><dd id="fact-length">—</dd></div></dl></section>
   <aside class="scope"><strong>探索性評估</strong><p id="scope-copy"></p></aside>
@@ -27,8 +27,22 @@
     <details class="method-detail"><summary>完整測試怎麼計分、怎麼讀 <span aria-hidden="true">＋</span></summary><div class="method-columns"><article><h3>完整區段，不是短視窗</h3><p id="full-test-protocol"></p><p>電路從錄音第 0 個樣本連續求解；S4、S6 與 S6＋PINN 在每個測試區段起點以零狀態開始，只帶入 Dry 暖機後計分；RiccardoVib 依其原生 16 樣本歷史。沒有增益擬合或延遲校正。</p></article><article><h3>選模是否用過測試集</h3><p>標示「事後選定」的列，是看過第 38 輪的測試結果後，改用驗證逐檔 macro ESR 重新挑出的第 40 輪，分數帶有輕微洩漏，只作對照。有界 gain 版在訓練前就把 macro ESR 寫進設定檔，測試集沒有參與任何選擇。</p><p>「ESR＞1」是誤差能量大於目標能量的檔數，代表該檔輸出不可用；單一爆音檔可讓逐檔平均或 pooled ESR 大幅上升，因此同時列出中位數。</p></article></div></details>
   </section>
 
+  <section id="generalization" class="section" hidden>
+    <div class="section-head"><div><p class="eyebrow">03 / GENERALIZATION · PILOT P1</p><h2>旋鈕組合留出：PINN 能否推廣到沒訓練過的設定？</h2></div><button id="export-generalization" class="quiet">匯出留出實驗 CSV</button></div>
+    <aside class="scope"><strong>進行中 · 尚無結論</strong><p id="gen-status"></p></aside>
+    <p id="gen-intro" class="helper"></p>
+    <h3>訓練狀態與驗證選模</h3>
+    <div id="gen-runs" class="table-wrap" role="region" aria-label="留出實驗各訓練的狀態與最佳輪次" tabindex="0"></div>
+    <div id="gen-chart" class="chart gen-chart"></div>
+    <p id="gen-chart-note" class="small muted"></p>
+    <h3 class="gen-heading">完整測試：留出組合與已訓練組合分開計分</h3>
+    <div id="gen-tests" class="table-wrap" role="region" aria-label="留出組合與已訓練組合的測試 ESR" tabindex="0"></div>
+    <div class="reading"><p id="gen-insight"></p><p id="gen-caveat"></p></div>
+    <details class="method-detail"><summary>留出實驗怎麼設計 <span aria-hidden="true">＋</span></summary><div class="method-columns"><article><h3>同一份錄音，不同的旋鈕組合</h3><p>620 個 CL-1B 檔各是一組 Attack × Release × Ratio × Threshold 設定。原本的測試集只換素材、不換設定，因此無法回答「沒見過的旋鈕組合」。P1 把 Threshold −40 dB 整層從訓練與驗證中移除（訓練與驗證區段都不用），測試時再把這些組合與已訓練組合分開計分。</p><p>三個比較組共用同一份留出清單、同樣 30 輪與驗證逐檔 macro ESR 選模：M-S6（純資料）、M-STRUCT（PINN 的電路輸出結構，但物理權重 0）、M-PINN（物理權重 10 輪內由 0 升到 1）。M-STRUCT 用來分辨優勢是來自物理 loss，還是只是輸出經過電路公式。</p></article><article><h3>判讀規則（訓練前固定）</h3><p id="gen-rule"></p><p>獨立樣本是「一次訓練」，不是單一檔案；兩個 seed 只能看方向，信賴區間要等 P2 完成更多留出方案後才有意義。完整計畫：<code>s6/docs/plans/2026-11-06-pinn-generalization-experiments.md</code>。</p></article></div></details>
+  </section>
+
   <details id="listening" class="section disclosure">
-    <summary><span><small>03 / LISTENING & DIAGNOSTICS</small>試聽與資料視覺化</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
+    <summary><span><small>04 / LISTENING & DIAGNOSTICS</small>試聽與資料視覺化</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
     <div class="detail-body">
       <div class="section-head compact"><div><p class="muted">指標輪廓圖隨上方片段、旋鈕篩選與彙整方式更新；每條軸以該指標在目前範圍六模型的最高值正規化，中心較近表示誤差較低。</p></div><label>圖表模型<select id="profile-model"></select></label></div>
       <div class="diagnostic-grid"><div class="panel"><h3>五項誤差輪廓</h3><div id="metric-profile" class="profile-chart" role="img" aria-label="目前模型的五項誤差輪廓圖"></div><p id="profile-note" class="small muted"></p></div><div class="panel"><h3>指標排名變化</h3><div id="rank-profile" class="rank-profile" role="img" aria-label="六模型在五項指標的排名圖"></div><p class="small muted">每欄第一名代表該項指標最低；純演算法基準不納入名次，仍顯示於總表。</p></div></div>
@@ -41,20 +55,20 @@
     </div>
   </details>
 
-  <details id="records" class="section disclosure"><summary><span><small>04 / RECORD DETAIL</small>逐檔檢視</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
+  <details id="records" class="section disclosure"><summary><span><small>05 / RECORD DETAIL</small>逐檔檢視</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
     <div class="detail-body"><div class="section-head compact"><p id="record-note" class="muted"></p><label>依哪個模型的誤差由高到低<select id="record-sort"></select></label></div>
     <div id="record-table" class="table-wrap" role="region" aria-label="逐檔模型誤差" tabindex="0"></div>
     <div class="pagination"><button id="prev" class="quiet">← 上一頁</button><span id="page-label" role="status"></span><button id="next" class="quiet">下一頁 →</button><button id="export-records" class="quiet">匯出篩選後逐檔 CSV</button></div></div>
   </details>
 
-  <details id="training" class="section disclosure"><summary><span><small>05 / TRAINING RECORD</small>訓練紀錄與最佳輪次</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
+  <details id="training" class="section disclosure"><summary><span><small>06 / TRAINING RECORD</small>訓練紀錄與最佳輪次</span><span class="disclosure-mark" aria-hidden="true">＋</span></summary>
     <div class="detail-body"><div class="section-head compact"><p class="muted">MLP／GRU 顯示一輪完整訓練中的步數與單批 loss；S4、S6 與 S6＋PINN 顯示 16 輪驗證與最佳輪次。RiccardoVib 未在本次重新訓練。</p><label>檢視模型<select id="history-model"><option value="s6_pinn">S6＋TFiLM＋PINN</option><option value="mlp">MLP＋PINN</option><option value="gru">GRU＋PINN</option><option value="s6">S6＋TFiLM</option><option value="s4">S4＋TFiLM</option></select></label></div>
     <p id="history-summary" class="helper"></p><div id="history-chart" class="chart"></div><p id="history-note" class="muted small"></p><div id="history-table" class="table-wrap" role="region" aria-label="訓練與驗證紀錄" tabindex="0"></div>
     <div class="pagination"><button id="history-prev" class="quiet">← 上一頁</button><span id="history-page" role="status"></span><button id="history-next" class="quiet">下一頁 →</button><button id="export-history" class="quiet">匯出此模型紀錄 CSV</button></div></div>
   </details>
 
   <section id="protocol" class="section">
-    <div class="section-head"><div><p class="eyebrow">06 / METHOD & COVERAGE</p><h2>比較成立的範圍</h2></div></div>
+    <div class="section-head"><div><p class="eyebrow">07 / METHOD & COVERAGE</p><h2>比較成立的範圍</h2></div></div>
     <p class="muted">相同評分位置，不代表相同訓練量。以下列出每個模型的來源與已完成的評估；沒有執行的項目不補值、不混入排名。</p>
     <div id="coverage-table" class="table-wrap" role="region" aria-label="模型來源及測試覆蓋狀態" tabindex="0"></div>
     <p class="small muted coverage-note">長片段、訓練區間診斷、靜音專項及歷史短視窗分開列示；沒有跨片段加總的總冠軍。A1／A2／A3 是 A 的子區段，F 含重複掃頻，G 僅 495 檔，H 是 2 秒靜音。長片段不是新的獨立測試。素材名稱是聲學與分類模型推定，仍待人工聽辨。完整測試集（620 檔）見上方第 02 節。</p>
