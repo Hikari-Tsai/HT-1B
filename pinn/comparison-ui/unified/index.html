@@ -29,7 +29,7 @@
 
   <section id="generalization" class="section" hidden>
     <div class="section-head"><div><p class="eyebrow">03 / GENERALIZATION · PILOT P1</p><h2>旋鈕組合留出：PINN 能否推廣到沒訓練過的設定？</h2></div><button id="export-generalization" class="quiet">匯出留出實驗 CSV</button></div>
-    <aside class="scope"><strong>進行中 · 尚無結論</strong><p id="gen-status"></p></aside>
+    <aside class="scope"><strong id="gen-badge">進行中</strong><p id="gen-status"></p></aside>
     <p id="gen-intro" class="helper"></p>
     <h3>訓練狀態與驗證選模</h3>
     <div id="gen-runs" class="table-wrap" role="region" aria-label="留出實驗各訓練的狀態與最佳輪次" tabindex="0"></div>
@@ -38,6 +38,11 @@
     <h3 class="gen-heading">完整測試：留出組合與已訓練組合分開計分</h3>
     <div id="gen-tests" class="table-wrap" role="region" aria-label="留出組合與已訓練組合的測試 ESR" tabindex="0"></div>
     <div class="reading"><p id="gen-insight"></p><p id="gen-caveat"></p></div>
+    <h3 class="gen-heading">預先登記的主要指標：留出檔逐檔 log ESR 差</h3>
+    <div id="gen-compare" class="table-wrap" role="region" aria-label="成對比較的 log ESR 差" tabindex="0"></div>
+    <p id="gen-compare-note" class="small muted"></p>
+    <div id="gen-diagnosis" class="pinn-study" hidden><h3>爆衝檔診斷：為什麼 PINN 在沒見過的 −40 dB 失敗</h3><p id="gen-diagnosis-intro" class="small muted"></p><div id="gen-diagnosis-table" class="table-wrap" role="region" aria-label="爆衝檔診斷" tabindex="0"></div><div class="reading"><p id="gen-diagnosis-insight"></p><p id="gen-diagnosis-params"></p></div></div>
+    <div class="pinn-study"><h3>下一步：軟約束改為硬約束</h3><p id="gen-next" class="small"></p></div>
     <details class="method-detail"><summary>留出實驗怎麼設計 <span aria-hidden="true">＋</span></summary><div class="method-columns"><article><h3>同一份錄音，不同的旋鈕組合</h3><p>620 個 CL-1B 檔各是一組 Attack × Release × Ratio × Threshold 設定。原本的測試集只換素材、不換設定，因此無法回答「沒見過的旋鈕組合」。P1 把 Threshold −40 dB 整層從訓練與驗證中移除（訓練與驗證區段都不用），測試時再把這些組合與已訓練組合分開計分。</p><p>三個比較組共用同一份留出清單、同樣 30 輪與驗證逐檔 macro ESR 選模：M-S6（純資料）、M-STRUCT（PINN 的電路輸出結構，但物理權重 0）、M-PINN（物理權重 10 輪內由 0 升到 1）。M-STRUCT 用來分辨優勢是來自物理 loss，還是只是輸出經過電路公式。</p></article><article><h3>判讀規則（訓練前固定）</h3><p id="gen-rule"></p><p>獨立樣本是「一次訓練」，不是單一檔案；兩個 seed 只能看方向，信賴區間要等 P2 完成更多留出方案後才有意義。完整計畫：<code>s6/docs/plans/2026-11-06-pinn-generalization-experiments.md</code>。</p></article></div></details>
   </section>
 

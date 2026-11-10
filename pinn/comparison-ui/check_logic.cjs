@@ -163,19 +163,26 @@ if(data.full_test){
  const g=data.full_test.generalization;
  if(g){
   // Held-out split recomputed from file names: threshold -40 dB is "t_40" in the TubeTech naming.
-  const t40=JSON.parse(fs.readFileSync(path.join(root,'runs/full-test-t40-s6-20261107/report.json'),'utf8')),heldout=k=>/_t_40_/.test(k);
-  for(const key of Object.keys(t40.records)){
-   const rec=Object.entries(t40.records[key]),held=rec.filter(([k])=>heldout(k)).map(([,v])=>v.esr),seen=rec.filter(([k])=>!heldout(k)).map(([,v])=>v.esr),row=g.tests.find(t=>t.key===key);
+  const t40=Object.assign({},...['full-test-t40-s6-20261107','full-test-t40-pinn-struct-20261110'].map(d=>JSON.parse(fs.readFileSync(path.join(root,'runs',d,'report.json'),'utf8')).records)),heldout=k=>/_t_40_/.test(k);
+  const median=v=>{const x=[...v].sort((a,b)=>a-b),m=x.length/2;return x.length%2?x[Math.floor(m)]:(x[m-1]+x[m])/2;};
+  for(const c of g.comparisons){
+   const diff=Object.keys(t40[c.a]).filter(k=>heldout(k)===c.heldout).map(k=>Math.log(t40[c.a][k].esr)-Math.log(t40[c.b][k].esr));
+   assert.equal(diff.length,c.files);close(c.median,median(diff));assert.ok(c.low<=c.median&&c.median<=c.high);
+  }
+  for(const key of Object.keys(t40)){
+   const rec=Object.entries(t40[key]),held=rec.filter(([k])=>heldout(k)).map(([,v])=>v.esr),seen=rec.filter(([k])=>!heldout(k)).map(([,v])=>v.esr),row=g.tests.find(t=>t.key===key);
    assert.equal(held.length,g.heldout_files);close(row.heldout_macro_esr,held.reduce((a,b)=>a+b)/held.length);close(row.seen_macro_esr,seen.reduce((a,b)=>a+b)/seen.length);
   }
-  assert.equal(g.heldout_files,124);assert.equal(g.training_cells,496);assert.deepEqual(g.scored,['t40_s6_s7','t40_s6_s8']);
+  assert.equal(g.heldout_files,124);assert.equal(g.training_cells,496);assert.deepEqual(g.scored,['t40_pinn_s7','t40_pinn_s8','t40_s6_s7','t40_s6_s8','t40_struct_s7']);assert.equal(g.comparisons.length,8);
   assert.deepEqual(g.runs.filter(r=>r.frozen_states).map(r=>r.key),['t40_struct_s8']);assert.equal(g.runs.find(r=>r.key==='t40_struct_s8').status,'replaced');
   assert.equal(get('generalization').hidden,false);
   for(const label of ['M-S6 · seed 7','M-PINN · seed 8','M-STRUCT · seed 9','參考：S6 有界 gain'])assert.ok(get('gen-tests').innerHTML.includes(label));
   assert.ok(!get('gen-tests').innerHTML.includes('M-STRUCT · seed 8'));assert.ok(get('gen-runs').innerHTML.includes('每輪完全相同'));
   assert.equal((get('gen-chart').innerHTML.match(/<polyline/g)||[]).length,6);
-  for(const id of ['gen-runs','gen-tests','gen-chart','gen-insight','gen-caveat'])assert.ok(!get(id).innerHTML.includes('NaN')&&!get(id).innerHTML.includes('undefined'));
-  assert.ok(get('gen-caveat').textContent.startsWith('還不能判斷'));
+  for(const id of ['gen-runs','gen-tests','gen-chart','gen-insight','gen-caveat','gen-compare','gen-diagnosis-table','gen-diagnosis-insight','gen-diagnosis-params','gen-next'])assert.ok(!get(id).innerHTML.includes('NaN')&&!get(id).innerHTML.includes('undefined')&&!get(id).innerHTML.includes('null'));
+  assert.equal(get('gen-badge').textContent,'P1 完成 · 暫停檢討');assert.ok(get('gen-caveat').textContent.startsWith('停止規則要求'));
+  assert.equal(get('gen-diagnosis').hidden,false);assert.equal(g.diagnosis.files,30);assert.ok(get('gen-diagnosis-table').innerHTML.includes('全組合 PINN'));
+  assert.ok(get('gen-compare').innerHTML.includes('M-PINN s7 − M-S6 s7'));assert.ok(get('gen-next').textContent.includes('硬約束'));
  }
 }
 for(const id of ['export-summary','export-records','export-json',...(data.full_test?['export-full-test']:[])])get(id).listeners.click();

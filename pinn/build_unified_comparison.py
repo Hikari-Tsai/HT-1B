@@ -216,8 +216,12 @@ T40_RUNS = {('s6', 7): ROOT/'runs/t40-s6-s7-20261106-1436', ('s6', 8): ROOT/'run
             ('pinn', 7): ROOT/'runs/t40-pinn-s7-20261106-1436', ('pinn', 8): ROOT/'runs/t40-pinn-s8-20261106-1436'}
 # Replacement for the stuck STRUCT seed 8 (user decision 2026-11-10); not trained yet.
 T40_PENDING = (('struct', 9),)
+T40_PENDING_NOTE = '2026-11-10 起於 GPU 5 訓練中'
 T40_REPLACED = {('struct', 8): '狀態卡住，以 seed 9 重跑取代'}
-T40_TESTS = (ROOT/'runs/full-test-t40-s6-20261107/report.json',)
+T40_TESTS = (ROOT/'runs/full-test-t40-s6-20261107/report.json',
+             ROOT/'runs/full-test-t40-pinn-struct-20261110/report.json')
+# Blow-up diagnosis of the held-out PINN failures (s6/docs/plans/2026-11-06-..., tools/blowup_diag.py).
+T40_DIAGNOSIS = ROOT/'runs/blowup-diagnosis-20261110.json'
 T40_INTERVALS = ROOT/'runs/v3/s6-v3-intervals.json'
 T40_ARMS = {'s6': ('M-S6', 'S6＋TFiLM 有界 gain'),
             'struct': ('M-STRUCT', 'PINN 架構 · 物理權重 0'),
@@ -263,7 +267,7 @@ def generalization(main, full_records):
     if [r['key'] for r in runs if r['frozen_states']] != ['t40_struct_s8']:
         raise ValueError('Unexpected STRUCT state check result')
     for arm, seed in T40_PENDING:
-        runs.append(dict(key=f't40_{arm}_s{seed}', arm=arm, seed=seed, status='pending', note='等待閒置 GPU',
+        runs.append(dict(key=f't40_{arm}_s{seed}', arm=arm, seed=seed, status='pending', note=T40_PENDING_NOTE,
                          epochs=30, curve=[]))
     reports = [read(p) for p in T40_TESTS]
     records = {'s6_bounded': full_records['s6_bounded']}
@@ -288,11 +292,44 @@ def generalization(main, full_records):
                           macro_esr=float(np.mean([r['esr'] for r in rec.values()])),
                           heldout_files_esr_above_1=int((held > 1).sum()),
                           heldout_median_log_ratio_vs_full=float(np.median(ratio))))
+    def paired(a, b, inside):
+        x = np.array([np.log(records[a][f]['esr'])-np.log(records[b][f]['esr']) for f in cells if (cells[f] in heldout) == inside])
+        boot = np.median(np.random.default_rng(20261110).choice(x, (5000, len(x))), axis=1)
+        return dict(a=a, b=b, heldout=inside, median=float(np.median(x)), low=float(np.percentile(boot, 2.5)),
+                    high=float(np.percentile(boot, 97.5)), better_share=float((x < 0).mean()), files=len(x))
+    comparisons = [paired(a, b, inside) for a, b in (('t40_pinn_s7', 't40_s6_s7'), ('t40_pinn_s8', 't40_s6_s8'),
+                                                       ('t40_struct_s7', 't40_s6_s7'), ('t40_pinn_s7', 't40_struct_s7'))
+                   if a in records and b in records for inside in (True, False)]
     return dict(scheme='T40', description='Threshold −40 dB 整層', heldout_cells=len(heldout),
                 training_cells=len(set(cells.values()))-len(heldout), heldout_files=int(sum(c in heldout for c in cells.values())),
                 files=len(cells), arms={k: dict(code=c, name=n) for k, (c, n) in T40_ARMS.items()},
                 runs=runs, tests=tests, scored=sorted(k for k in records if k != 's6_bounded'),
+                comparisons=comparisons, diagnosis=blowup_diagnosis(records, cells, heldout),
                 stopping_rule='兩個 seed 的 M-PINN 在 T40 留出檔上都比 M-S6 差（log ESR 差中位數 > 0）時先停下檢討，不進 P2。')
+
+
+def blowup_diagnosis(records, cells, heldout):
+    """Medians over the PINN blow-up files (held out) and their trained -30 dB twins."""
+    if not T40_DIAGNOSIS.exists():
+        return None
+    d = read(T40_DIAGNOSIS)
+    bad = sorted({f for k in ('t40_pinn_s7', 't40_pinn_s8') for f in cells if cells[f] in heldout and records[k][f]['esr'] > 1})
+    twins = [f.replace('_t_40_', '_t_30_') for f in bad]
+    if d['heldout'] != bad or d['files'] != bad+twins:
+        raise ValueError('Blow-up diagnosis does not cover the current PINN blow-up files')
+    models = list(d['models'])
+    def med(files, model, key):
+        values = [d['records'][f][model][key] for f in files if d['records'][f][model].get(key) is not None]
+        return float(np.median(values)) if values else None
+    groups = {}
+    for name, files in (('heldout', bad), ('trained', twins)):
+        groups[name] = {m: dict(**{k: med(files, m, k) for k in ('esr', 'level_error_db', 'gain_db_pred', 'gain_db_target',
+                                                                   'worst_near_onset', 'e_max', 'f_p50')},
+                                c3_residual=float(np.median([d['records'][f][m]['residual']['c3_kcl'] for f in files]))
+                                if 'residual' in d['records'][files[0]][m] else None)
+                        for m in models}
+    return dict(files=len(bad), models=d['models'], groups=groups, parameters=d['parameters'],
+                frames_near_onset=med(bad, models[0], 'frames_near_onset'))
 
 
 def sha(path):
