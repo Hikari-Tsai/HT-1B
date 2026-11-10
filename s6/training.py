@@ -43,11 +43,13 @@ def load_config(path, extra_training=None):
         result[section] = {**defaults, **values}
     m, t = result['model'], result['training']
     # s6_tfilm_pinn: S6/TFiLM backbone with the reduced-circuit e/f/s head (batched trainer only).
-    if m['architecture'] in ('s6_tfilm', 's6_tfilm_pinn') and 'blocks' not in document.get('model', {}):
+    # s6_tfilm_circuit[_knobs|_none]: S6/TFiLM corrections around the integrated circuit (batched only).
+    circuit = ('s6_tfilm_circuit', 's6_tfilm_circuit_knobs', 's6_tfilm_circuit_none')
+    if m['architecture'] in ('s6_tfilm', 's6_tfilm_pinn', *circuit) and 'blocks' not in document.get('model', {}):
         m['blocks'] = 2
     for name in set(m)-{'architecture', 'output_gain'}:
         _positive_integer(m[name], f'model.{name}')
-    if m['architecture'] not in ('s4_tfilm', 's6_tfilm', 's6_tfilm_pinn') or (m['architecture'] != 's4_tfilm' and m['blocks'] != 2):
+    if m['architecture'] not in ('s4_tfilm', 's6_tfilm', 's6_tfilm_pinn', *circuit) or (m['architecture'] != 's4_tfilm' and m['blocks'] != 2):
         raise ValueError('Choose s4_tfilm or s6_tfilm (exactly two blocks for S6)')
     if m['output_gain'] not in ('linear', 'bounded') or (m['output_gain'] == 'bounded' and m['architecture'] != 's6_tfilm'):
         raise ValueError('output_gain must be linear, or bounded for s6_tfilm')

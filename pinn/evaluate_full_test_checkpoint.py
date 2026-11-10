@@ -26,6 +26,9 @@ from s6.fused_scan import accelerate_training
 from s6.models import AudioModel
 from s6.pinn_experiment import pots_for
 from s6.pinn_model import S6PINN
+from s6.hybrid_model import S6Circuit
+
+CIRCUIT_MODELS = (S6PINN, S6Circuit)  # streamed with physical pots; S6Circuit has no residual
 from s6.representative_experiment import write_json, utc
 
 
@@ -66,7 +69,8 @@ def run(output, models, limit=None, batch=32):
         loaded[key] = accelerate_training(AudioModel.from_checkpoint(path).cuda().eval())
         sources[key] = dict(path=str(path.resolve().relative_to(ROOT)), sha256=sha(path),
                             output_gain=loaded[key].output_gain,
-                            head='reduced_circuit' if isinstance(loaded[key], S6PINN) else 'gain')
+                            head=('integrated_circuit' if isinstance(loaded[key], S6Circuit) else 'reduced_circuit')
+                            if isinstance(loaded[key], CIRCUIT_MODELS) else 'gain')
     records = {key: {} for key in models}
     physics = {key: {} for key, model in loaded.items() if isinstance(model, S6PINN)}
     originals = {r["id"]: r for r in manifest["records"]}
@@ -78,9 +82,9 @@ def run(output, models, limit=None, batch=32):
         gain = torch.tensor([g for _, g in labels], dtype=torch.float32, device="cuda")
         x = torch.from_numpy(dry).cuda()
         for key, model in loaded.items():
-            if isinstance(model, S6PINN):
+            if isinstance(model, CIRCUIT_MODELS):
                 values, sums = stream_pinn(model, x, controls, pots_for(selected, originals, "cuda"), spans)
-                for key2, total in sums.items():
+                for key2, total in sums.items():  # empty for S6Circuit
                     physics[key][key2] = physics[key].get(key2, 0.)+float(total.sum())
             else:
                 values = stream(model, x, controls, gain)

@@ -19,6 +19,10 @@ network state, zero (circuit at rest) at each record start, circuit pots from
 each record's filename labels. Loss adds physics_weight x mean ODE residual^2
 (linearly ramped from 0 over physics_ramp_epochs) and prior_weight x the
 physical-parameter prior; physical parameters use physical_learning_rate.
+
+architectures s6_tfilm_circuit[_knobs|_none] stream S6Circuit: e/f/s are
+integrated by the differentiable circuit (hard constraint), so there is no
+residual term; the loss adds prior_weight x the physical-parameter prior.
 """
 from collections import deque
 import json
@@ -69,10 +73,19 @@ def is_pinn(config):
     return config['model']['architecture'] == 's6_tfilm_pinn'
 
 
+def uses_circuit(config):
+    """Models streamed with circuit pots and a physical-parameter group: S6PINN and S6Circuit."""
+    from .hybrid_model import ARCHITECTURES
+    return is_pinn(config) or config['model']['architecture'] in ARCHITECTURES
+
+
 def build_model(config):
     if is_pinn(config):
         from .pinn_model import S6PINN
         return S6PINN(**{**config['model'], 'architecture': 's6_tfilm'})
+    if uses_circuit(config):
+        from .hybrid_model import ARCHITECTURES, S6Circuit
+        return S6Circuit(ARCHITECTURES[config['model']['architecture']], **{**config['model'], 'architecture': 's6_tfilm'})
     return AudioModel(**config['model'])
 
 
@@ -432,7 +445,7 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
     if options['epochs'] <= start_epoch:
         raise ValueError('epochs must exceed the last completed epoch')
     _accelerate(model, device)
-    if is_pinn(config):
+    if uses_circuit(config):
         physical = {id(p) for p in model.physical.parameters()}
         groups = [dict(params=[p for p in model.parameters() if id(p) not in physical]),
                   dict(params=list(model.physical.parameters()), lr=options['physical_learning_rate'])]
@@ -453,8 +466,8 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
     _json_atomic(output/'manifest.json', json.loads(Path(manifest).read_text()))
     train_records = [r for r in records if r.split == 'train']
     validation_records = [r for r in records if r.split == 'validation']
-    train_pots = record_pots(train_records) if is_pinn(config) else None
-    validation_pots = record_pots(validation_records) if is_pinn(config) else None
+    train_pots = record_pots(train_records) if uses_circuit(config) else None
+    validation_pots = record_pots(validation_records) if uses_circuit(config) else None
     report = None
     for epoch in range(start_epoch+1, options['epochs']+1):
         begun = time.monotonic()
@@ -484,7 +497,8 @@ def train_batched(manifest, config_path, output, *, device='cpu', resume=None):
             loss, step_sums, step_samples = scored_loss(criterion, prediction, target, rows,
                                                         batch['valid'], chunk)
             if residual is not None:
-                physics, prior = physics_loss(residual, rows, batch['valid'], chunk), model.prior_loss()
+                prior = model.prior_loss()
+                physics = physics_loss(residual, rows, batch['valid'], chunk) if residual else prior.new_zeros(())
                 loss = loss + weight*physics + options['prior_weight']*prior
                 step_sums.update(physics=physics.item()*step_samples, prior=prior.item()*step_samples)
             norm = None
@@ -560,4 +574,4 @@ def evaluate_checkpoint_batched(manifest, checkpoint, *, split='validation', dev
     return evaluate_batched(model, records, chunk_samples=options['chunk_samples'],
                             warmup_samples=options['warmup_samples'], lanes=lanes,
                             block_chunks=options.get('read_block_chunks', 32), device=device,
-                            pots=record_pots(records) if is_pinn(metadata['config']) else None)
+                            pots=record_pots(records) if uses_circuit(metadata['config']) else None)
